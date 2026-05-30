@@ -50,9 +50,33 @@
   var currentBase = "EMAP";
   baseLayers.EMAP.addTo(map);
 
-  // 疊圖:LUIMAP(國土利用調查)
-  var luimapLayer = nlscLayer("LUIMAP", { opacity: 0.55 });
-  var luimapVisible = false;
+  // 疊圖圖層(NLSC WMTS,可多選 + 共用透明度)
+  var OVERLAY_DEFS = [
+    { id: "LUIMAP", label: "國土利用調查(綠地/土地利用)" },
+    { id: "LUIMAP02", label: "國土利用-森林" },
+    { id: "SCHOOL", label: "各級學校範圍(學區)" },
+    { id: "LANDSECT", label: "段籍圖(地籍)" },
+    { id: "URBAN", label: "都市計畫土地使用分區(實驗)" }
+  ];
+  var overlayOpacity = 0.55;
+  var overlays = {};
+  OVERLAY_DEFS.forEach(function (def) {
+    var layer = nlscLayer(def.id, { opacity: overlayOpacity });
+    var rec = { layer: layer, errors: 0 };
+    layer.on("tileerror", function () {
+      rec.errors++;
+      if (rec.errors === 1) {
+        var w = document.getElementById("ovwarn-" + def.id);
+        if (w) w.textContent = "⚠ 無法載入(端點待確認)";
+      }
+    });
+    overlays[def.id] = rec;
+  });
+  function bringOverlaysToFront() {
+    OVERLAY_DEFS.forEach(function (def) {
+      if (map.hasLayer(overlays[def.id].layer)) overlays[def.id].layer.bringToFront();
+    });
+  }
 
   // ---- 圖層群組 ----
   var markersGroup = L.layerGroup().addTo(map);
@@ -77,32 +101,39 @@
     map.removeLayer(baseLayers[currentBase]);
     baseLayers[next].addTo(map);
     // 確保疊圖保持在底圖之上
-    if (luimapVisible) luimapLayer.bringToFront();
+    bringOverlaysToFront();
     currentBase = next;
   });
 
   // =========================================================
-  //  LUIMAP 疊圖 + 透明度
+  //  疊圖圖層清單 + 共用透明度
   // =========================================================
-  var luimapToggle = document.getElementById("luimap-toggle");
-  var luimapOpacity = document.getElementById("luimap-opacity");
-  var luimapOpacityVal = document.getElementById("luimap-opacity-val");
-
-  luimapToggle.addEventListener("change", function () {
-    if (luimapToggle.checked) {
-      luimapLayer.addTo(map);
-      luimapLayer.bringToFront();
-      luimapVisible = true;
+  var overlayListEl = document.getElementById("overlay-list");
+  OVERLAY_DEFS.forEach(function (def) {
+    var row = document.createElement("label");
+    row.className = "switch-row";
+    row.innerHTML = "<input type='checkbox' data-ov='" + def.id + "'> " + def.label +
+      " <span class='ovwarn' id='ovwarn-" + def.id + "'></span>";
+    overlayListEl.appendChild(row);
+  });
+  overlayListEl.addEventListener("change", function (e) {
+    var id = e.target.getAttribute && e.target.getAttribute("data-ov");
+    if (!id) return;
+    var rec = overlays[id];
+    if (e.target.checked) {
+      rec.layer.addTo(map);
+      rec.layer.bringToFront();
     } else {
-      map.removeLayer(luimapLayer);
-      luimapVisible = false;
+      map.removeLayer(rec.layer);
     }
   });
 
-  luimapOpacity.addEventListener("input", function () {
-    var v = parseFloat(luimapOpacity.value);
-    luimapLayer.setOpacity(v);
-    luimapOpacityVal.textContent = v.toFixed(2);
+  var ovOpacity = document.getElementById("ov-opacity");
+  var ovOpacityVal = document.getElementById("ov-opacity-val");
+  ovOpacity.addEventListener("input", function () {
+    overlayOpacity = parseFloat(ovOpacity.value);
+    ovOpacityVal.textContent = overlayOpacity.toFixed(2);
+    OVERLAY_DEFS.forEach(function (def) { overlays[def.id].layer.setOpacity(overlayOpacity); });
   });
 
   // =========================================================

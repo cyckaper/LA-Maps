@@ -313,6 +313,11 @@ html, body {
   #map { height: 55%; }
 }
 
+/* 疊圖圖層清單 */
+.overlay-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.overlay-list .switch-row { margin: 0; }
+.ovwarn { color: var(--danger-hover); font-size: 11px; }
+
 /* 綠地分區小標題 */
 .ghdr {
   margin: 6px 0 2px;

@@ -7,7 +7,7 @@ const MODEL = "claude-sonnet-4-6";
 
 // 系統提示:嚴格限定只根據提供的數值解讀,引用法規,標示代理/不確定。
 // 內含法規參考文字,供 Claude 正確引用(避免幻覺)。放在 system 並開啟 prompt caching。
-const SYSTEM_PROMPT = `你是台灣的都市規劃與基地分析助理。請依使用者提供的「真實數值(JSON)」撰寫一份繁體中文的基地分析報告。
+const SYSTEM_PROMPT = `你是台灣的都市規劃與基地分析助理。請依使用者提供的「真實數值(JSON)」撰寫一份基地分析報告。輸出語言:依使用者指示(繁體中文或 English),未指定時用繁體中文。
 
 嚴格規則:
 1. 只能根據提供的數值與下列法規/準則進行解讀,不可自行編造任何數字、人口、面積或法條。
@@ -31,7 +31,7 @@ const SYSTEM_PROMPT = `你是台灣的都市規劃與基地分析助理。請依
 五、規劃建議(2-4 點,具體、可行,扣回前述數據與法規)
 六、資料與限制說明(資料來源、代理指標、不確定性)
 
-語氣:專業、客觀、精準。全文約 400-700 字。`;
+語氣:專業、客觀、精準。全文約 400-700 字(英文版約 300-500 words)。`;
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -60,9 +60,10 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "請求格式錯誤(需為 JSON)。" }, 400);
   }
 
-  const userContent =
-    "以下是某基地的分析真實數值(JSON)。請據此撰寫繁體中文基地分析報告:\n\n" +
-    "```json\n" + JSON.stringify(data, null, 2) + "\n```";
+  const lang = data && data.lang === "en" ? "en" : "zh";
+  const userContent = lang === "en"
+    ? "Below are the real analysis figures (JSON) for a site. Write the site analysis report in English, following the required structure and rules. Keep Taiwanese place names and species names; you may keep scientific names as-is.\n\n```json\n" + JSON.stringify(data, null, 2) + "\n```"
+    : "以下是某基地的分析真實數值(JSON)。請據此撰寫繁體中文基地分析報告:\n\n```json\n" + JSON.stringify(data, null, 2) + "\n```";
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {

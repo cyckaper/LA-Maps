@@ -1,0 +1,214 @@
+:root {
+  --bg: #1f2933;
+  --panel: #27313c;
+  --panel-2: #2f3b48;
+  --accent: #3ba88f;
+  --accent-hover: #45c2a4;
+  --danger: #c0564a;
+  --danger-hover: #d56456;
+  --text: #e8edf1;
+  --text-dim: #9aa7b3;
+  --border: #3a4654;
+  --sidebar-w: 340px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: "Noto Sans TC", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+#app {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* ---------- Sidebar ---------- */
+#sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  height: 100%;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.brand h1 {
+  margin: 0;
+  font-size: 19px;
+  letter-spacing: 1px;
+}
+.subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.panel {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ---------- Search ---------- */
+.search-row {
+  display: flex;
+  gap: 6px;
+}
+#search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+}
+#search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+#search-btn {
+  padding: 8px 14px;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#search-btn:hover { background: var(--accent-hover); }
+
+.status {
+  margin: 8px 0 0;
+  font-size: 12px;
+  min-height: 16px;
+  color: var(--text-dim);
+}
+.status.error { color: var(--danger-hover); }
+.status.ok { color: var(--accent-hover); }
+
+/* ---------- Radio / switch ---------- */
+.radio-group label,
+.switch-row,
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  padding: 5px 0;
+  cursor: pointer;
+}
+.radio-group label { line-height: 1.3; }
+
+.slider-row {
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.slider-row input[type="range"] {
+  flex: 1;
+  min-width: 120px;
+  accent-color: var(--accent);
+}
+#luimap-opacity-val {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-hover);
+}
+
+/* ---------- Tool buttons ---------- */
+.btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tool-btn {
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+.tool-btn:hover { background: #36434f; }
+.tool-btn.active {
+  border-color: var(--accent);
+  background: #2c4a44;
+}
+.tool-btn.danger:hover {
+  background: #5a2f2a;
+  border-color: var(--danger);
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* ---------- Area result ---------- */
+.area-result {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.area-value {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--accent-hover);
+  font-variant-numeric: tabular-nums;
+}
+.area-unit {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.foot {
+  margin-top: auto;
+  padding: 14px 18px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.foot p { margin: 2px 0; }
+
+/* ---------- Map ---------- */
+#map {
+  flex: 1;
+  height: 100%;
+}
+
+/* Leaflet popup tweak for dark theme legibility kept default */
+
+@media (max-width: 720px) {
+  #app { flex-direction: column; }
+  #sidebar {
+    width: 100%;
+    min-width: 0;
+    height: 45%;
+  }
+  #map { height: 55%; }
+}

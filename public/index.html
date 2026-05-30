@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>基地分析工作站 · Site Analysis Studio</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet.draw -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <header class="brand">
+        <h1>基地分析工作站</h1>
+        <p class="subtitle">Site Analysis Studio · 第一階段</p>
+      </header>
+
+      <!-- 地名搜尋 -->
+      <section class="panel">
+        <h2>地名搜尋</h2>
+        <form id="search-form" autocomplete="off">
+          <div class="search-row">
+            <input id="search-input" type="text" placeholder="輸入地名,例如:台灣大學" />
+            <button id="search-btn" type="submit">搜尋</button>
+          </div>
+        </form>
+        <p id="search-status" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <!-- 底圖切換 -->
+      <section class="panel">
+        <h2>底圖</h2>
+        <div class="radio-group" id="basemap-group">
+          <label><input type="radio" name="basemap" value="EMAP" checked /> 臺灣通用電子地圖 (EMAP)</label>
+          <label><input type="radio" name="basemap" value="EMAP5" /> 電子地圖+等高線+門牌 (EMAP5)</label>
+          <label><input type="radio" name="basemap" value="PHOTO2" /> 正射影像 (PHOTO2)</label>
+        </div>
+      </section>
+
+      <!-- 疊圖 -->
+      <section class="panel">
+        <h2>疊圖:國土利用調查 (LUIMAP)</h2>
+        <label class="switch-row">
+          <input type="checkbox" id="luimap-toggle" /> 顯示 LUIMAP 疊圖
+        </label>
+        <label class="slider-row">
+          透明度 <span id="luimap-opacity-val">0.55</span>
+          <input type="range" id="luimap-opacity" min="0" max="1" step="0.05" value="0.55" />
+        </label>
+      </section>
+
+      <!-- 工具 -->
+      <section class="panel">
+        <h2>工具</h2>
+        <div class="btn-group">
+          <button id="tool-marker" class="tool-btn" type="button">點選放標記</button>
+          <button id="tool-polygon" class="tool-btn" type="button">繪製基地範圍</button>
+          <button id="tool-clear" class="tool-btn danger" type="button">清除全部</button>
+        </div>
+        <p id="tool-hint" class="hint">提示:選「點選放標記」後,在地圖上點擊即可放置標記。</p>
+      </section>
+
+      <!-- 量測結果 -->
+      <section class="panel">
+        <h2>基地面積</h2>
+        <div id="area-result" class="area-result">
+          <span class="area-value" id="area-value">—</span>
+          <span class="area-unit">公頃</span>
+        </div>
+        <p class="hint" id="area-detail"></p>
+      </section>
+
+      <footer class="foot">
+        <p>圖磚來源:內政部國土測繪中心 (NLSC)</p>
+        <p>地名搜尋:OpenStreetMap Nominatim</p>
+      </footer>
+    </aside>
+
+    <main id="map"></main>
+  </div>
+
+  <!-- Leaflet -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet.draw -->
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <!-- Turf.js -->
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
+  <script src="./js/app.js"></script>
+</body>
+</html>

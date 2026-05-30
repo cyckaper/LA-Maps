@@ -126,6 +126,8 @@
 
   // 最近一次分析焦點(放標記或畫基地時更新),供綠地分析使用
   var lastFocus = null;
+  // 最近一次畫的基地多邊形(GeoJSON);有值時綠地分析改為「範圍內」模式
+  var lastSitePolygon = null;
   // 最近一次對應到的行政區指標(供熱環境/健康研判使用)
   var lastRegionProps = null;
   // 最近一次基地面積(公頃)與彙整分析資料(供 AI 解讀使用)
@@ -222,6 +224,7 @@
         e.latlng.lng.toFixed(5)
     ).openPopup();
     lastFocus = e.latlng;
+    lastSitePolygon = null; // 點模式
     // 點 → 查村里人口指標
     lookupVillage(e.latlng.lat, e.latlng.lng);
   });
@@ -263,6 +266,7 @@
       var c = turf.centroid(e.layer.toGeoJSON());
       var xy = c.geometry.coordinates; // [lng, lat]
       lastFocus = L.latLng(xy[1], xy[0]);
+      lastSitePolygon = e.layer.toGeoJSON(); // 面模式:分析範圍內綠地
       lookupTown(xy[1], xy[0]);
     } catch (err) {
       /* 忽略 */
@@ -320,6 +324,7 @@
     computeArea();
     resetInfoPanel();
     lastFocus = null;
+    lastSitePolygon = null;
     resetGreenPanel();
     toolHint.textContent = "已清除所有標記與範圍。";
   });
@@ -670,6 +675,7 @@
   }
 
   function analyzeGreen() {
+    if (lastSitePolygon) { analyzeGreenSite(lastSitePolygon); return; }
     var focus = lastFocus || map.getCenter();
     var lat = focus.lat, lng = focus.lng;
     greenRegionEl.textContent = "查詢 OSM 綠地中…(半徑 " + GREEN_RADIUS + "m)";
@@ -943,15 +949,27 @@
       prow("高齡比例(65+)", pnum(p.elderly_share, " %")) + prow("幼年比例(0-14)", pnum(p.child_share, " %")) +
       "</table>";
 
-    html += "<h2>開放空間 · 綠地(半徑 " + pnum(g.radius_m, " m") + ",公園≥0.1ha)</h2><table class='summary'>" +
-      prow("最近公園距離", pnum(g.nearest_park_dist_m, " m")) + prow("最近公園面積", pnum(g.nearest_park_area_ha, " 公頃")) +
-      prow("300m 內公園", pnum(g.park_count_300m, " 處")) + prow("500m 內公園", pnum(g.park_count_500m, " 處")) +
-      prow("公園面積(500m)", pnum(g.park_area_500m_ha, " 公頃")) +
-      prow("零星綠地處數(500m)", pnum(g.incidental_count_500m, " 處")) +
-      prow("零星綠地面積(500m)", pnum(g.incidental_area_500m_ha, " 公頃")) +
-      prow("綠覆率(全綠地)", pnum(g.green_coverage_pct, " %")) +
-      prow("3-30-300 可及性", g.has_300m_park_access === undefined ? "—" : (g.has_300m_park_access ? "達標" : "不足")) +
-      "</table>";
+    if (g.mode === "within_site") {
+      html += "<h2>開放空間 · 綠地(基地範圍內)</h2><table class='summary'>" +
+        prow("基地面積", pnum(g.site_area_ha, " 公頃")) +
+        prow("基地內公園(≥0.1ha)", pnum(g.park_count_in_site, " 處")) +
+        prow("基地內公園面積", pnum(g.park_area_in_site_ha, " 公頃")) +
+        prow("基地內零星綠地", pnum(g.incidental_count_in_site, " 處")) +
+        prow("基地內綠地總面積", pnum(g.green_area_in_site_ha, " 公頃")) +
+        prow("基地綠覆率", pnum(g.site_green_coverage_pct, " %")) +
+        prow("§45 10% 對照", g.meets_10pct_ref === undefined ? "—" : (g.meets_10pct_ref ? "達標" : "未達")) +
+        "</table>";
+    } else {
+      html += "<h2>開放空間 · 綠地(半徑 " + pnum(g.radius_m, " m") + ",公園≥0.1ha)</h2><table class='summary'>" +
+        prow("最近公園距離", pnum(g.nearest_park_dist_m, " m")) + prow("最近公園面積", pnum(g.nearest_park_area_ha, " 公頃")) +
+        prow("300m 內公園", pnum(g.park_count_300m, " 處")) + prow("500m 內公園", pnum(g.park_count_500m, " 處")) +
+        prow("公園面積(500m)", pnum(g.park_area_500m_ha, " 公頃")) +
+        prow("零星綠地處數(500m)", pnum(g.incidental_count_500m, " 處")) +
+        prow("零星綠地面積(500m)", pnum(g.incidental_area_500m_ha, " 公頃")) +
+        prow("綠覆率(全綠地)", pnum(g.green_coverage_pct, " %")) +
+        prow("3-30-300 可及性", g.has_300m_park_access === undefined ? "—" : (g.has_300m_park_access ? "達標" : "不足")) +
+        "</table>";
+    }
 
     html += "<h2>熱環境 · 健康研判</h2><table class='summary'>" +
       prow("綠覆率(OSM下限)", pnum(h.green_coverage_pct, " %")) +

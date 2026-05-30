@@ -149,7 +149,7 @@ async function probe(url) {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "LA-Maps-build/1.0", Accept: "application/json" },
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(12000)
     });
     out.status = res.status;
     out.ctype = res.headers.get("content-type");
@@ -201,19 +201,33 @@ const CODE_SWEEP = [];
 for (let i = 1; i <= 30; i++) CODE_SWEEP.push("ODRP" + String(i).padStart(3, "0"));
 const SWEEP_PERIODS = ["114", "113", "11412", "11312", "11411", "11410"];
 
+// 單一代碼:逐期別嘗試,回傳第一個有資料者
+async function probeCode(code) {
+  for (const ym of SWEEP_PERIODS) {
+    const p = await probe(`${RIS_BASE}/${code}/${ym}?page=1`);
+    if (p.rows > 0 && p.data) {
+      return {
+        code, period: ym, cols: (p.keys || []).length,
+        keys: p.keys, firstRows: p.data, diag: diagOf(p)
+      };
+    }
+  }
+  return null;
+}
+
+// 並行掃描(分批)以縮短建置時間
 async function discover() {
   const found = [];
-  for (const code of CODE_SWEEP) {
-    for (const ym of SWEEP_PERIODS) {
-      const p = await probe(`${RIS_BASE}/${code}/${ym}?page=1`);
-      if (p.rows > 0 && p.data) {
-        found.push({
-          code, period: ym, cols: (p.keys || []).length,
-          keys: p.keys, firstRows: p.data
-        });
-        DIAG.push({ ds: code, ym, ...diagOf(p) });
-        log(`發現 ${code}/${ym}: ${p.rows} 列, ${(p.keys || []).length} 欄`);
-        break; // 此代碼已找到資料,換下一個
+  const BATCH = 6;
+  for (let i = 0; i < CODE_SWEEP.length; i += BATCH) {
+    const batch = CODE_SWEEP.slice(i, i + BATCH);
+    const results = await Promise.all(batch.map(probeCode));
+    for (let j = 0; j < results.length; j++) {
+      const r = results[j];
+      if (r) {
+        found.push(r);
+        DIAG.push({ ds: r.code, ym: r.period, ...r.diag });
+        log(`發現 ${r.code}/${r.period}: ${r.cols} 欄`);
       }
     }
   }

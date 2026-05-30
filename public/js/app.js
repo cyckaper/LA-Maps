@@ -1177,6 +1177,7 @@
     "th,td{border:1px solid #bbb;padding:4px 8px;text-align:left;font-size:13px;vertical-align:top;}" +
     "table.summary th{background:#f0f0f0;width:42%;font-weight:600;}" +
     ".src{font-size:11px;color:#555;}" +
+    ".author{margin-top:14px;padding-top:8px;border-top:1px solid #ccc;font-size:12px;font-weight:600;color:#222;}" +
     ".bar{max-width:760px;margin:0 auto 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}" +
     ".bar button{font-size:15px;padding:9px 18px;border:0;border-radius:8px;background:#3ba88f;color:#fff;cursor:pointer;}" +
     ".bar .hint{color:#777;font-size:12px;}" +
@@ -1253,6 +1254,7 @@
     html += "<h2>" + t("r.hAI") + "</h2><div>" + aiHtml + "</div>";
 
     html += "<h2>" + t("r.hSrc") + "</h2><p class='src'>" + t("r.src") + "</p>";
+    html += "<p class='author'>" + t("foot.author") + "</p>";
     return html;
   }
 

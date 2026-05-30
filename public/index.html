@@ -10,7 +10,7 @@
   <!-- Leaflet.draw -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 
-  <link rel="stylesheet" href="./css/style.css?v=4b1" />
+  <link rel="stylesheet" href="./css/style.css?v=4c" />
 </head>
 <body>
   <div id="app">
@@ -42,16 +42,15 @@
         </div>
       </section>
 
-      <!-- 疊圖 -->
+      <!-- 疊圖圖層 -->
       <section class="panel">
-        <h2>疊圖:國土利用調查 (LUIMAP)</h2>
-        <label class="switch-row">
-          <input type="checkbox" id="luimap-toggle" /> 顯示 LUIMAP 疊圖
-        </label>
+        <h2>疊圖圖層(NLSC 官方)</h2>
+        <div id="overlay-list" class="overlay-list"></div>
         <label class="slider-row">
-          透明度 <span id="luimap-opacity-val">0.55</span>
-          <input type="range" id="luimap-opacity" min="0" max="1" step="0.05" value="0.55" />
+          透明度 <span id="ov-opacity-val">0.55</span>
+          <input type="range" id="ov-opacity" min="0" max="1" step="0.05" value="0.55" />
         </label>
+        <p class="hint">綠地以「國土利用調查」官方圖層為視覺實況參考(較 OSM 完整);分析數值仍以 OSM 計算。</p>
       </section>
 
       <!-- 工具 -->
@@ -144,6 +143,6 @@
   <!-- Marked (Markdown 渲染 AI 報告) -->
   <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
 
-  <script src="./js/app.js?v=4b1"></script>
+  <script src="./js/app.js?v=4c"></script>
 </body>
 </html>

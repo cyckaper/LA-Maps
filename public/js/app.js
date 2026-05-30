@@ -1396,7 +1396,7 @@
     var d = new Date();
     var pad = function (n) { return (n < 10 ? "0" : "") + n; };
     var stamp = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
-      "-" + pad(d.getHours()) + pad(d.getMinutes());
+      "-" + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
     // 地區名去除檔名不合法字元
     var region = (lastRegionTitle || "").replace(/[\\/:*?"<>|]/g, "").trim();
     return t("r.title") + (region ? "_" + region : "") + "_" + stamp;

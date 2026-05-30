@@ -515,6 +515,7 @@
 
   var OVERPASS = "https://overpass-api.de/api/interpreter";
   var GREEN_RADIUS = 500; // 公尺:服務圈半徑
+  var MIN_PARK_M2 = 1000; // 有效公園最小面積(0.1 公頃,兒童遊樂場法定最小規模)
   var greenMarkers = L.layerGroup().addTo(map);
 
   function resetGreenPanel() {
@@ -572,7 +573,12 @@
     if (ring.length < 4) return null;
     try {
       var poly = turf.polygon([ring]);
-      poly.properties = { name: (el.tags && (el.tags.name || el.tags["name:zh"])) || "(未命名綠地)" };
+      var tags = el.tags || {};
+      // leisure 類視為「公園/正式開放空間」;landuse 類視為「零星綠覆」
+      poly.properties = {
+        name: tags.name || tags["name:zh"] || (tags.leisure ? "(未命名公園)" : "(零星綠地)"),
+        category: tags.leisure ? "park" : "green"
+      };
       return poly;
     } catch (e) {
       return null;
@@ -615,22 +621,23 @@
       .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function (data) {
         var focusPt = turf.point([lng, lat]);
-        var parks = [];
+        var features = [];
         (data.elements || []).forEach(function (el) {
           if (el.type !== "way") return;
           var poly = wayToPolygon(el);
           if (!poly) return;
           poly.properties.area_m2 = turf.area(poly);
           poly.properties.dist = nearestDist(focusPt, poly);
-          parks.push(poly);
+          features.push(poly);
         });
 
         greenMarkers.clearLayers();
         // 服務圈
         L.circle([lat, lng], { radius: GREEN_RADIUS, color: "#3ba88f", weight: 1, fill: false, dashArray: "4" }).addTo(greenMarkers);
 
-        if (parks.length === 0) {
+        if (features.length === 0) {
           greenRegionEl.textContent = "周邊 " + GREEN_RADIUS + "m 內查無 OSM 綠地圖徵(或該區 OSM 標記不全)。";
+          greenIndEl.innerHTML = "";
           greenSourceEl.textContent = "資料:OpenStreetMap(可能不完整)";
           lastAnalysis = {
             focus: { lat: +lat.toFixed(5), lng: +lng.toFixed(5) },
@@ -642,40 +649,56 @@
           return;
         }
 
-        parks.sort(function (a, b) { return a.properties.dist - b.properties.dist; });
-        var nearest = parks[0];
-        var within300 = parks.filter(function (p) { return p.properties.dist <= 300; });
         var sum = function (arr) { return arr.reduce(function (s, p) { return s + p.properties.area_m2; }, 0); };
-        var area300 = sum(within300);
-        var area500 = sum(parks);
-        var has300 = within300.length > 0;
-        var nearestHa = nearest.properties.area_m2 / 10000;
-        var coverage = (area500 / (Math.PI * GREEN_RADIUS * GREEN_RADIUS)) * 100;
+        // 綠覆率以全部綠地計(代理樹冠覆蓋)
+        var greenTotalM2 = sum(features);
+        var coverage = (greenTotalM2 / (Math.PI * GREEN_RADIUS * GREEN_RADIUS)) * 100;
 
-        // 在地圖上畫出綠地
-        parks.forEach(function (p) {
-          L.geoJSON(p, { style: { color: "#2e8b57", weight: 1, fillColor: "#3ba88f", fillOpacity: 0.35 } })
-            .bindPopup((p.properties.name || "綠地") + "<br>" +
-              (p.properties.area_m2 / 10000).toFixed(2) + " 公頃 · 距離 " +
-              Math.round(p.properties.dist) + " m")
+        // 公園類(leisure)且面積 ≥0.1ha 才算「有效公園」
+        var parks = features.filter(function (f) {
+          return f.properties.category === "park" && f.properties.area_m2 >= MIN_PARK_M2;
+        });
+        parks.sort(function (a, b) { return a.properties.dist - b.properties.dist; });
+        var parks300 = parks.filter(function (p) { return p.properties.dist <= 300; });
+        var parkArea500 = sum(parks);
+        var nearestPark = parks[0] || null;
+        var nearestHa = nearestPark ? nearestPark.properties.area_m2 / 10000 : null;
+        var has300 = parks300.length > 0;
+
+        // 地圖:有效公園深綠、其餘綠地(零星/小塊)淺綠
+        features.forEach(function (f) {
+          var isEffPark = f.properties.category === "park" && f.properties.area_m2 >= MIN_PARK_M2;
+          L.geoJSON(f, {
+            style: isEffPark
+              ? { color: "#1f6b46", weight: 1.5, fillColor: "#2e8b57", fillOpacity: 0.45 }
+              : { color: "#7fae8e", weight: 0.5, fillColor: "#9cc8aa", fillOpacity: 0.25 }
+          })
+            .bindPopup(
+              (isEffPark ? "🏞 公園:" : "綠地:") + (f.properties.name || "") + "<br>" +
+              (f.properties.area_m2 / 10000).toFixed(2) + " 公頃 · 距離 " +
+              Math.round(f.properties.dist) + " m")
             .addTo(greenMarkers);
         });
 
         greenRegionEl.innerHTML = "焦點周邊 <b>" + GREEN_RADIUS + " m</b> 綠地分析";
         var html = "";
-        html += ind("最近綠地距離", Math.round(nearest.properties.dist), "m");
-        html += ind("最近綠地面積", nearestHa.toFixed(2), "公頃");
-        html += ind("300m 內綠地", within300.length, "處");
-        html += ind("300m 內面積", (area300 / 10000).toFixed(2), "公頃");
-        html += ind("500m 內綠地", parks.length, "處");
-        html += ind("500m 內面積", (area500 / 10000).toFixed(2), "公頃");
+        if (nearestPark) {
+          html += ind("最近公園距離", Math.round(nearestPark.properties.dist), "m");
+          html += ind("最近公園面積", nearestHa.toFixed(2), "公頃");
+        } else {
+          html += "<div class='ind' style='grid-column:1/-1'><dt>最近公園(≥0.1ha)</dt><dd>500m 內無</dd></div>";
+        }
+        html += ind("300m 內公園", parks300.length, "處");
+        html += ind("500m 內公園", parks.length, "處");
+        html += ind("500m 公園面積", (parkArea500 / 10000).toFixed(2), "公頃");
+        html += ind("綠覆率(全綠地)", coverage.toFixed(1), "%");
         html += ind("3-30-300 可及性", has300 ? "✓ 達標" : "✗ 不足", "");
         // 法規對照:最近公園規模屬性
-        var scale = nearestHa >= 4 ? "達社區公園規模(≥4ha)"
-          : nearestHa >= 0.5 ? "達閭鄰公園規模(≥0.5ha)"
-          : nearestHa >= 0.1 ? "達兒童遊樂場規模(≥0.1ha)"
-          : "小於兒童遊樂場最小規模(<0.1ha)";
-        html += "<div class='ind' style='grid-column:1/-1'><dt>法規對照(最近綠地)</dt><dd style='font-size:12px;font-weight:400'>" + scale + "</dd></div>";
+        var scale = nearestPark == null ? "周邊 500m 內無 ≥0.1ha 公園"
+          : nearestHa >= 4 ? "最近公園達社區公園規模(≥4ha)"
+          : nearestHa >= 0.5 ? "最近公園達閭鄰公園規模(≥0.5ha)"
+          : "最近公園達兒童遊樂場規模(≥0.1ha)";
+        html += "<div class='ind' style='grid-column:1/-1'><dt>法規對照</dt><dd style='font-size:12px;font-weight:400'>" + scale + "</dd></div>";
         greenIndEl.innerHTML = html;
 
         // 彙整供 AI 解讀的真實數值,並產出熱環境研判
@@ -685,20 +708,22 @@
           population: lastRegionProps,
           green: {
             radius_m: GREEN_RADIUS,
-            nearest_dist_m: Math.round(nearest.properties.dist),
-            nearest_area_ha: +nearestHa.toFixed(2),
-            count_300m: within300.length,
-            area_300m_ha: +(area300 / 10000).toFixed(2),
-            count_500m: parks.length,
-            area_500m_ha: +(area500 / 10000).toFixed(2),
-            has_300m_access: has300
+            min_park_ha: MIN_PARK_M2 / 10000,
+            nearest_park_dist_m: nearestPark ? Math.round(nearestPark.properties.dist) : null,
+            nearest_park_area_ha: nearestHa != null ? +nearestHa.toFixed(2) : null,
+            park_count_300m: parks300.length,
+            park_count_500m: parks.length,
+            park_area_500m_ha: +(parkArea500 / 10000).toFixed(2),
+            green_total_500m_ha: +(greenTotalM2 / 10000).toFixed(2),
+            green_coverage_pct: +coverage.toFixed(1),
+            has_300m_park_access: has300
           }
         };
         renderHeat(coverage, lastRegionProps);
 
         greenSourceEl.innerHTML =
-          "資料:OpenStreetMap(即時查詢,可能不完整)<br>" +
-          "準則:3-30-300(住家 300m 內應有綠地)、都市計畫定期通盤檢討辦法(兒童遊樂場≥0.1ha、閭鄰公園≥0.5ha、社區公園≥4ha);都市計畫法§45 公園綠地廣場兒童遊樂場合計≥計畫面積10%。";
+          "資料:OpenStreetMap(即時查詢,可能不完整)。公園=OSM leisure 類且 ≥0.1ha;綠覆率含全部綠地(含零星草地,代理樹冠)。<br>" +
+          "準則:3-30-300(住家 300m 內應有公園/綠地)、通盤檢討辦法(兒童遊樂場≥0.1ha、閭鄰公園≥0.5ha、社區公園≥4ha);都市計畫法§45 公園綠地廣場兒童遊樂場合計≥計畫面積10%。";
       })
       .catch(function (err) {
         var aborted = err && err.name === "AbortError";
@@ -832,11 +857,12 @@
       prow("高齡比例(65+)", pnum(p.elderly_share, " %")) + prow("幼年比例(0-14)", pnum(p.child_share, " %")) +
       "</table>";
 
-    html += "<h2>開放空間 · 綠地(半徑 " + pnum(g.radius_m, " m") + ")</h2><table class='summary'>" +
-      prow("最近綠地距離", pnum(g.nearest_dist_m, " m")) + prow("最近綠地面積", pnum(g.nearest_area_ha, " 公頃")) +
-      prow("300m 內綠地", pnum(g.count_300m, " 處")) + prow("300m 內面積", pnum(g.area_300m_ha, " 公頃")) +
-      prow("500m 內綠地", pnum(g.count_500m, " 處")) + prow("500m 內面積", pnum(g.area_500m_ha, " 公頃")) +
-      prow("3-30-300 可及性", g.has_300m_access === undefined ? "—" : (g.has_300m_access ? "達標" : "不足")) +
+    html += "<h2>開放空間 · 綠地(半徑 " + pnum(g.radius_m, " m") + ",公園≥0.1ha)</h2><table class='summary'>" +
+      prow("最近公園距離", pnum(g.nearest_park_dist_m, " m")) + prow("最近公園面積", pnum(g.nearest_park_area_ha, " 公頃")) +
+      prow("300m 內公園", pnum(g.park_count_300m, " 處")) + prow("500m 內公園", pnum(g.park_count_500m, " 處")) +
+      prow("500m 公園面積", pnum(g.park_area_500m_ha, " 公頃")) +
+      prow("綠覆率(全綠地)", pnum(g.green_coverage_pct, " %")) +
+      prow("3-30-300 可及性", g.has_300m_park_access === undefined ? "—" : (g.has_300m_park_access ? "達標" : "不足")) +
       "</table>";
 
     html += "<h2>熱環境 · 健康研判</h2><table class='summary'>" +

@@ -333,19 +333,33 @@ html, body {
 /* 列印報告容器:螢幕隱藏,列印時顯示 */
 #print-area { display: none; }
 @media print {
+  /* 關鍵:解除 height:100%/overflow 的箝制,否則 iOS 存 PDF 只剩第一頁 */
+  html, body {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff;
+    color: #111;
+  }
   #app { display: none !important; }
-  #print-area { display: block; }
-  body { background: #fff; color: #111; }
+  #print-area { display: block; position: static; }
   .pr-doc { font-size: 12px; color: #111; max-width: 720px; margin: 0 auto; }
-  .pr-doc h1 { font-size: 20px; margin: 0 0 6px; }
+  .pr-doc h1 { font-size: 20px; margin: 0 0 6px; page-break-after: avoid; }
   .pr-doc h2 {
     font-size: 14px;
     margin: 14px 0 4px;
     border-bottom: 1px solid #888;
     padding-bottom: 2px;
+    page-break-after: avoid;
   }
   .pr-meta { font-size: 12px; color: #444; margin: 0 0 8px; }
-  .pr-doc table { width: 100%; border-collapse: collapse; margin: 4px 0 8px; }
+  .pr-doc table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4px 0 8px;
+    page-break-inside: auto;
+  }
+  .pr-doc tr { page-break-inside: avoid; }
   .pr-doc th,
   .pr-doc td { border: 1px solid #bbb; padding: 3px 6px; text-align: left; font-size: 12px; }
   .pr-doc > table th { background: #f0f0f0; width: 45%; font-weight: 600; }

@@ -314,7 +314,7 @@
     "r.uSp": { zh: " 種", en: "" },
     "r.uObs": { zh: " 筆", en: "" },
     "r.aiEmpty": { zh: "(尚未產生 AI 報告)", en: "(AI report not generated yet)" },
-    "r.printHint": { zh: "在列印對話框可選「儲存成 PDF」", en: "In the print dialog, choose Save as PDF" },
+    "r.printHint": { zh: "在列印對話框選「儲存成 PDF」;檔名已自動帶入地區與時間,可另存新檔避免覆蓋舊報告。", en: "In the print dialog, choose Save as PDF. The filename already includes the region and timestamp, so each export is a distinct file." },
     "r.src": {
       zh: "底圖:NLSC;界線:NLSC / taiwan-atlas;人口:內政部戶政司 ODRP014(11412);綠地:© OpenStreetMap 貢獻者(ODbL)/ Overpass;地名:OSM Nominatim;生物多樣性:iNaturalist;AI:Anthropic Claude。<br>免責:綠地與綠覆率為即時查詢之下限估計;熱環境/健康為研判而非實測;iNaturalist 觀測涵蓋度依地區而異。本報告僅供規劃參考,不構成正式法定文件。",
       en: "Base: NLSC; boundaries: NLSC / taiwan-atlas; population: MOI ODRP014 (2025-12); green: © OpenStreetMap contributors (ODbL) / Overpass; place: OSM Nominatim; biodiversity: iNaturalist; AI: Anthropic Claude.<br>Disclaimer: green/coverage are live lower-bound estimates; heat/health are assessments, not measurements; iNaturalist coverage varies by area. For planning reference only; not an official document."

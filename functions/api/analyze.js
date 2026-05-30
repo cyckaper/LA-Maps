@@ -21,7 +21,7 @@ const SYSTEM_PROMPT = `你是台灣的都市規劃與基地分析助理。請依
 - 3-30-300 綠地準則(實證導向):住家可見 3 棵樹、鄰里 30% 樹冠覆蓋、住家 300 公尺內有綠地/公園。
 - 老化指數 = 65歲以上人口 ÷ 0-14歲人口 ×100;扶養比、扶幼比、扶老比為人口依賴負擔指標。
 
-5. 若提供 biodiversity 欄位,以其物種數、觀測筆數、受脅物種、分類群組成、代表性物種(top_species)與受脅物種名錄(threatened_list)評估生態現況;請具體點名代表性與受脅物種。iNaturalist 為社群觀測,涵蓋度依地區而異,屬參考性指標而非完整生態調查,須標示此限制。
+5. 若提供 biodiversity 欄位,以其物種數、觀測筆數、受脅物種、分類群組成、代表性物種(top_species)與受脅物種名錄(threatened_list)評估生態現況。代表性物種點名 3-5 種即可;受脅物種僅挑選最具保育意義的 5-8 種點名說明,其餘以「等共 N 種」帶過,切勿逐一窮舉整份名錄。iNaturalist 為社群觀測,涵蓋度依地區而異,屬參考性指標而非完整生態調查,須標示此限制。
 6. 若提供 climate 欄位(Open-Meteo ERA5 重分析之多年平均背景值,非即時天氣),請依年均溫、最熱月均溫、高溫日數、年降雨量、盛行風向、日均日射量,推導對基地設計的微氣候意涵:通風廊道與建物開窗方位(對應盛行風向)、遮蔭與植栽配置(對應高溫日數與日射量)、排水/滯洪與雨水花園(對應年降雨量)、以及氣候韌性。引用時須標明為「氣候背景值」。
 
 報告結構(用簡短段落與條列,務求精煉好讀):
@@ -77,7 +77,7 @@ export async function onRequestPost({ request, env }) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 3500,
+        max_tokens: 6000,
         stream: true,
         system: [
           { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }
@@ -116,6 +116,10 @@ export async function onRequestPost({ request, env }) {
               const j = JSON.parse(payload);
               if (j.type === "content_block_delta" && j.delta && typeof j.delta.text === "string") {
                 controller.enqueue(encoder.encode(j.delta.text));
+              } else if (j.type === "message_delta" && j.delta && j.delta.stop_reason === "max_tokens") {
+                // 仍因長度被截斷:附上明顯提示,避免使用者誤以為報告已完整
+                controller.enqueue(encoder.encode(
+                  "\n\n---\n\n> ⚠️ 報告因長度上限被截斷,以上內容未完整。請縮小基地範圍或重新產生。"));
               }
             } catch (e) { /* 忽略無法解析的事件 */ }
           });

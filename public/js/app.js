@@ -135,6 +135,8 @@
         "<br>經度 " +
         e.latlng.lng.toFixed(5)
     ).openPopup();
+    // 點 → 查村里人口指標
+    lookupVillage(e.latlng.lat, e.latlng.lng);
   });
 
   // --- 多邊形繪製 ---
@@ -168,7 +170,15 @@
     polygonDrawer = null;
     setPolygonBtnState(false);
     computeArea();
-    toolHint.textContent = "基地範圍已完成,面積顯示於左側。";
+    toolHint.textContent = "基地範圍已完成,面積與所在鄉鎮指標顯示於左側。";
+    // 面 → 取範圍中心,查所在鄉鎮市區指標
+    try {
+      var c = turf.centroid(e.layer.toGeoJSON());
+      var xy = c.geometry.coordinates; // [lng, lat]
+      lookupTown(xy[1], xy[0]);
+    } catch (err) {
+      /* 忽略 */
+    }
   });
 
   map.on(L.Draw.Event.DRAWSTOP, function () {
@@ -218,6 +228,7 @@
     cancelPolygonDraw();
     disableMarkerMode();
     computeArea();
+    resetInfoPanel();
     toolHint.textContent = "已清除所有標記與範圍。";
   });
 
@@ -295,6 +306,170 @@
         );
       });
   });
+
+  // =========================================================
+  //  第二階段:人口空間對應(點→村里、面→鄉鎮)
+  //  資料由 GitHub Actions 於建置時產生於 ./data/
+  // =========================================================
+  var DATA = {
+    towns: null, townsIdx: null,
+    villages: null, villagesIdx: null,
+    meta: null, villagesLoading: null
+  };
+
+  var infoRegionEl = document.getElementById("info-region");
+  var indicatorsEl = document.getElementById("indicators");
+  var infoSourceEl = document.getElementById("info-source");
+
+  var INDICATOR_DEFS = [
+    { key: "pop", label: "人口數", unit: "人", int: true },
+    { key: "households", label: "戶數", unit: "戶", int: true },
+    { key: "density", label: "人口密度", unit: "人/km²" },
+    { key: "household_size", label: "戶量", unit: "人/戶" },
+    { key: "sex_ratio", label: "性比例", unit: "男/百女" },
+    { key: "aging_index", label: "老化指數", unit: "" },
+    { key: "dep_ratio", label: "扶養比", unit: "%" },
+    { key: "child_dep", label: "扶幼比", unit: "%" },
+    { key: "old_dep", label: "扶老比", unit: "%" },
+    { key: "area_km2", label: "面積", unit: "km²" }
+  ];
+
+  function fmtVal(v, def) {
+    if (v == null || v === "") return "—";
+    if (def.int) return Math.round(v).toLocaleString("zh-Hant");
+    return Number(v).toLocaleString("zh-Hant", { maximumFractionDigits: 2 });
+  }
+
+  function resetInfoPanel() {
+    infoRegionEl.textContent = "點一個點查村里、畫一塊面查鄉鎮。";
+    indicatorsEl.innerHTML = "";
+    infoSourceEl.textContent = "";
+  }
+
+  function renderIndicators(props, titleHtml) {
+    infoRegionEl.innerHTML = titleHtml;
+    var html = "";
+    for (var i = 0; i < INDICATOR_DEFS.length; i++) {
+      var d = INDICATOR_DEFS[i];
+      var val = props ? props[d.key] : null;
+      html +=
+        "<div class='ind'><dt>" + d.label + "</dt><dd>" +
+        fmtVal(val, d) +
+        (d.unit ? " <span class='u'>" + d.unit + "</span>" : "") +
+        "</dd></div>";
+    }
+    indicatorsEl.innerHTML = html;
+    var period = DATA.meta && DATA.meta.population_period;
+    if (props && props.pop != null) {
+      infoSourceEl.textContent =
+        "人口資料期別(民國):" + (period || "—") + " · 內政部戶政司";
+    } else {
+      infoSourceEl.textContent = "(此區暫無人口數值,僅顯示界線與面積)";
+    }
+  }
+
+  function buildIndex(fc) {
+    var idx = [];
+    for (var i = 0; i < fc.features.length; i++) {
+      var f = fc.features[i];
+      try {
+        idx.push({ f: f, bbox: turf.bbox(f) });
+      } catch (e) {
+        /* 略過異常幾何 */
+      }
+    }
+    return idx;
+  }
+
+  // 點位落在哪個多邊形(bbox 預篩 + 精確判斷)
+  function locate(lng, lat, idx) {
+    for (var i = 0; i < idx.length; i++) {
+      var b = idx[i].bbox;
+      if (lng < b[0] || lng > b[2] || lat < b[1] || lat > b[3]) continue;
+      try {
+        if (turf.booleanPointInPolygon([lng, lat], idx[i].f)) return idx[i].f;
+      } catch (e) {
+        /* 略過 */
+      }
+    }
+    return null;
+  }
+
+  function loadJSON(url) {
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
+
+  // 啟動:載入鄉鎮界線 + meta(村里檔較大,延後到首次需要時才載)
+  Promise.all([
+    loadJSON("./data/towns.json").catch(function () { return null; }),
+    loadJSON("./data/meta.json").catch(function () { return null; })
+  ]).then(function (res) {
+    DATA.towns = res[0];
+    DATA.meta = res[1];
+    if (DATA.towns) {
+      DATA.townsIdx = buildIndex(DATA.towns);
+      resetInfoPanel();
+    } else {
+      infoRegionEl.textContent =
+        "尚無圖資(資料建置中或建置失敗,請稍後重新整理)。";
+    }
+  });
+
+  function ensureVillages() {
+    if (DATA.villagesIdx) return Promise.resolve(true);
+    if (DATA.villagesLoading) return DATA.villagesLoading;
+    infoRegionEl.textContent = "載入村里資料中…";
+    DATA.villagesLoading = loadJSON("./data/villages.json")
+      .then(function (fc) {
+        DATA.villages = fc;
+        DATA.villagesIdx = buildIndex(fc);
+        return true;
+      })
+      .catch(function () {
+        infoRegionEl.textContent = "村里資料載入失敗。";
+        return false;
+      });
+    return DATA.villagesLoading;
+  }
+
+  function lookupVillage(lat, lng) {
+    ensureVillages().then(function (ok) {
+      if (!ok || !DATA.villagesIdx) return;
+      var f = locate(lng, lat, DATA.villagesIdx);
+      if (!f) {
+        infoRegionEl.textContent = "此點不在任何村里範圍內。";
+        indicatorsEl.innerHTML = "";
+        return;
+      }
+      var p = f.properties;
+      renderIndicators(
+        p,
+        "村里 · " + (p.COUNTYNAME || "") + (p.TOWNNAME || "") +
+          " <b>" + (p.VILLNAME || "") + "</b>"
+      );
+    });
+  }
+
+  function lookupTown(lat, lng) {
+    if (!DATA.townsIdx) {
+      infoRegionEl.textContent = "鄉鎮圖資尚未就緒。";
+      return;
+    }
+    var f = locate(lng, lat, DATA.townsIdx);
+    if (!f) {
+      infoRegionEl.textContent = "範圍中心不在任何鄉鎮市區內。";
+      indicatorsEl.innerHTML = "";
+      return;
+    }
+    var p = f.properties;
+    renderIndicators(
+      p,
+      "鄉鎮市區 · " + (p.COUNTYNAME || "") + " <b>" + (p.TOWNNAME || "") + "</b>"
+    );
+  }
 
   // 在地圖右下角標示資料來源(Leaflet attribution 已含 NLSC)
   map.attributionControl.setPrefix(

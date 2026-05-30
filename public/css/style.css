@@ -187,6 +187,52 @@ html, body {
   color: var(--text-dim);
 }
 
+/* ---------- 人口指標 ---------- */
+.info-region {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.info-region b {
+  color: var(--accent-hover);
+  font-size: 15px;
+}
+.indicators {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.indicators:empty {
+  display: none;
+}
+.ind {
+  background: var(--panel);
+  padding: 7px 9px;
+}
+.ind dt {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 0 0 2px;
+}
+.ind dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.ind dd .u {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
 .foot {
   margin-top: auto;
   padding: 14px 18px;

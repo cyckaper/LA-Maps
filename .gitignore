@@ -1,0 +1,5 @@
+node_modules/
+package-lock.json
+
+# 由 GitHub Actions 於建置時產生(scripts/build-data.mjs),不進版控
+public/data/

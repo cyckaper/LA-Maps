@@ -311,6 +311,7 @@ html, body {
   color: var(--text-dim);
 }
 .foot p { margin: 2px 0; }
+.foot-author { color: var(--text); font-weight: 600; line-height: 1.4; }
 
 /* ---------- Map ---------- */
 #map {

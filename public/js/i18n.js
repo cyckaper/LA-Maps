@@ -74,6 +74,10 @@
       zh: "免責聲明:綠地與綠覆率為 OpenStreetMap 即時查詢,屬下限估計,可能不完整;熱環境/健康為依代理指標之研判,非實測氣溫或健康數據。本工具分析僅供規劃參考,不構成正式法定文件或專業意見。",
       en: "Disclaimer: green space and canopy figures are live OSM queries (lower-bound estimates, possibly incomplete); heat/health results are proxy-based assessments, not measured temperature or health data. For planning reference only; not an official or professional document."
     },
+    "foot.author": {
+      zh: "張俊彥 國立臺灣大學園藝暨景觀學系特聘教授",
+      en: "Chun-Yen Chang, Distinguished Professor, Department of Horticulture and Landscape Architecture, National Taiwan University"
+    },
     "foot": { zh: "© 2026 基地分析工作站 · Site Analysis Studio · 僅供參考", en: "© 2026 Site Analysis Studio · For reference only" },
 
     "lang.toggle": { zh: "EN", en: "中" },

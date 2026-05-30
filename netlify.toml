@@ -1,0 +1,11 @@
+# Netlify 部署設定
+[build]
+  command = "npm install && node scripts/build-data.mjs"
+  publish = "public"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# 明確指定 Netlify Functions 目錄(避免誤抓 Cloudflare 的 functions/ 目錄)
+[functions]
+  directory = "netlify/functions"

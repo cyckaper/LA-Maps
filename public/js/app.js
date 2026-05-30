@@ -67,8 +67,8 @@
     { id: "LUIMAP", label: "國土利用調查(綠地/土地利用)", type: "nlsc" },
     { id: "SCHOOL", label: "各級學校範圍(學區)", type: "nlsc" },
     { id: "LANDSECT", label: "段籍圖(地籍)", type: "nlsc" },
-    { id: "LIQUEFACTION", label: "土壤液化潛勢", type: "geo", layer: "Geomap_Envi_Soil_liquefatcion_2021" },
-    { id: "FAULT", label: "活動斷層分布(2021)", type: "geo", layer: "25K_Geomap_fault_2021" }
+    { id: "LIQUEFACTION", label: "土壤液化潛勢", type: "geo", layer: "WMS/Geomap_Envi_Soil_liquefatcion_2021" },
+    { id: "FAULT", label: "活動斷層分布(2021)", type: "geo", layer: "WMS/25K_Geomap_fault_2021" }
   ];
   var overlayOpacity = 0.55;
   var overlays = {};

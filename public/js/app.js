@@ -710,9 +710,15 @@
           elToPolygons(el).forEach(function (poly) {
             var clip = null;
             try { clip = turf.intersect(poly, sitePoly); } catch (e) { clip = null; }
-            if (!clip) return; // 不在基地內
+            // intersect 失敗時退回:只要與基地相交就計入,面積取較小者(估算)
+            if (!clip) {
+              var overlaps = false;
+              try { overlaps = turf.booleanIntersects(poly, sitePoly); } catch (e) { overlaps = false; }
+              if (!overlaps) return; // 真的不相交
+            }
             var a = 0;
-            try { a = turf.area(clip); } catch (e) { a = 0; }
+            try { a = clip ? turf.area(clip) : Math.min(poly.properties.area_m2, siteAreaM2); }
+            catch (e) { a = 0; }
             if (a <= 0) return;
             poly.properties.clip_area_m2 = a;
             greenM2 += a;
@@ -978,35 +984,52 @@
       return;
     }
     aiBtn.disabled = true;
-    aiOutput.innerHTML = "<p class='ai-loading'>AI 解讀中…(約 10-20 秒)</p>";
+    aiOutput.innerHTML = "<p class='ai-loading'>AI 解讀中…(逐步產生)</p>";
     aiSource.textContent = "";
 
-    fetchWithTimeout("./api/analyze", 45000, {
+    // 串流讀取後端純文字回應(後端把 Claude 串流轉成 text/plain)
+    fetch("./api/analyze", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(lastAnalysis)
     })
       .then(function (r) {
-        // 先讀純文字,避免後端回非 JSON(如 404 HTML)時 r.json() 拋出費解錯誤
-        return r.text().then(function (t) { return { ok: r.ok, status: r.status, text: t }; });
-      })
-      .then(function (res) {
-        var j = null;
-        try { j = JSON.parse(res.text); } catch (e) { j = null; }
-        if (!res.ok || !j) {
-          var snippet = (res.text || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
-          throw new Error((j && j.error) || ("HTTP " + res.status + " · " + (snippet || "無回應內容")));
+        var ct = r.headers.get("content-type") || "";
+        // 後端錯誤時回 JSON;成功時回 text/plain 串流
+        if (!r.ok || ct.indexOf("application/json") >= 0) {
+          return r.text().then(function (t) {
+            var msg = t;
+            try { var j = JSON.parse(t); if (j && j.error) msg = j.error; } catch (e) {}
+            throw new Error(msg || ("HTTP " + r.status));
+          });
         }
-        aiOutput.innerHTML = renderReport(j.report || "(無內容)");
-        aiSource.textContent = "由 Claude 依本基地真實數值生成 · 模型 " + (j.model || "");
+        if (!r.body || !r.body.getReader) {
+          // 舊瀏覽器無串流:整段讀取
+          return r.text().then(function (t) {
+            aiOutput.innerHTML = renderReport(t || "(無內容)");
+          });
+        }
+        var reader = r.body.getReader();
+        var decoder = new TextDecoder();
+        var acc = "";
+        function pump() {
+          return reader.read().then(function (res) {
+            if (res.done) { aiOutput.innerHTML = renderReport(acc || "(無內容)"); return; }
+            acc += decoder.decode(res.value, { stream: true });
+            aiOutput.innerHTML = renderReport(acc);
+            aiOutput.scrollTop = aiOutput.scrollHeight;
+            return pump();
+          });
+        }
+        return pump();
+      })
+      .then(function () {
+        aiSource.textContent = "由 Claude 依本基地真實數值生成";
       })
       .catch(function (err) {
         var msg = String(err && err.message ? err.message : err);
-        // GitHub Pages 上沒有後端函式,/api/analyze 會 404 → 友善提示
         aiOutput.innerHTML =
           "<p class='ai-err'>AI 解讀暫時無法使用。</p>" +
-          "<p class='ai-err'>請確認後端 <code>/api/analyze</code> 已部署,且已於主機後台設定 " +
-          "<code>ANTHROPIC_API_KEY</code> 環境變數並重新部署。</p>" +
           "<p class='ai-err' style='opacity:.7'>訊息:" + msg + "</p>";
         aiSource.textContent = "";
       })

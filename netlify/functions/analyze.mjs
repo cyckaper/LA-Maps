@@ -60,8 +60,9 @@ export default async (req) => {
     "以下是某基地的分析真實數值(JSON)。請據此撰寫繁體中文基地分析報告:\n\n" +
     "```json\n" + JSON.stringify(data, null, 2) + "\n```";
 
+  let upstream;
   try {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    upstream = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -70,21 +71,64 @@ export default async (req) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1800,
+        max_tokens: 1500,
+        stream: true, // 串流:邊產生邊回傳,避免 Netlify 閒置逾時(504)
         system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: userContent }]
       })
     });
-
-    const out = await resp.json();
-    if (!resp.ok) {
-      return json({ error: (out && out.error && out.error.message) || "AI 服務回應錯誤。" }, resp.status);
-    }
-    const text = (out.content || []).map((b) => b.text || "").join("").trim();
-    return json({ report: text, model: MODEL });
   } catch (e) {
     return json({ error: "呼叫 AI 服務失敗:" + (e && e.message ? e.message : String(e)) }, 502);
   }
+
+  if (!upstream.ok || !upstream.body) {
+    let msg = "AI 服務回應錯誤(HTTP " + upstream.status + ")。";
+    try { const j = await upstream.json(); if (j && j.error && j.error.message) msg = j.error.message; } catch (e) {}
+    return json({ error: msg }, upstream.status || 502);
+  }
+
+  // 解析 Anthropic SSE,逐塊把文字 delta 以純文字串流回前端
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const reader = upstream.body.getReader();
+      let buf = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let idx;
+          while ((idx = buf.indexOf("\n")) >= 0) {
+            const line = buf.slice(0, idx).trim();
+            buf = buf.slice(idx + 1);
+            if (!line.startsWith("data:")) continue;
+            const payload = line.slice(5).trim();
+            if (payload === "[DONE]") continue;
+            try {
+              const evt = JSON.parse(payload);
+              if (evt.type === "content_block_delta" && evt.delta && evt.delta.text) {
+                controller.enqueue(encoder.encode(evt.delta.text));
+              }
+            } catch (e) { /* 忽略非 JSON 行 */ }
+          }
+        }
+      } catch (e) {
+        controller.enqueue(encoder.encode("\n\n(串流中斷:" + (e.message || e) + ")"));
+      }
+      controller.close();
+    }
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-cache",
+      "access-control-allow-origin": "*"
+    }
+  });
 };
 
 // Netlify Functions 2.0:直接把此函式掛在 /api/analyze

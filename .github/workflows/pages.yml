@@ -33,6 +33,10 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # 若 repo 尚未啟用 Pages,讓 workflow 自動以「GitHub Actions」為來源啟用,
+          # 免去手動到 Settings → Pages 設定的步驟
+          enablement: true
 
       - name: Upload artifact (public/)
         uses: actions/upload-pages-artifact@v3

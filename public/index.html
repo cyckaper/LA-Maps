@@ -10,14 +10,14 @@
   <!-- Leaflet.draw -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 
-  <link rel="stylesheet" href="./css/style.css?v=3b" />
+  <link rel="stylesheet" href="./css/style.css?v=3c" />
 </head>
 <body>
   <div id="app">
     <aside id="sidebar">
       <header class="brand">
         <h1>基地分析工作站</h1>
-        <p class="subtitle">Site Analysis Studio · 第一階段</p>
+        <p class="subtitle">Site Analysis Studio · 真實台灣圖資</p>
       </header>
 
       <!-- 地名搜尋 -->
@@ -100,6 +100,14 @@
         <p class="hint" id="heat-source"></p>
       </section>
 
+      <!-- AI 解讀 -->
+      <section class="panel">
+        <h2>AI 解讀</h2>
+        <button id="ai-btn" class="tool-btn" type="button">產生 AI 基地分析報告</button>
+        <div id="ai-output" class="ai-output"></div>
+        <p class="hint" id="ai-source"></p>
+      </section>
+
       <footer class="foot">
         <p>圖磚來源:內政部國土測繪中心 (NLSC)</p>
         <p>地名搜尋:OpenStreetMap Nominatim</p>
@@ -116,6 +124,6 @@
   <!-- Turf.js -->
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
 
-  <script src="./js/app.js?v=3b"></script>
+  <script src="./js/app.js?v=3c"></script>
 </body>
 </html>

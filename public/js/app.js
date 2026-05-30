@@ -1121,7 +1121,7 @@
     fetch("./api/analyze", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(lastAnalysis)
+      body: JSON.stringify(Object.assign({}, lastAnalysis, { lang: (window.i18nLang ? window.i18nLang() : "zh") }))
     })
       .then(function (r) {
         var ct = r.headers.get("content-type") || "";

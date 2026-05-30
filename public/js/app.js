@@ -594,11 +594,20 @@
   var heatRegionEl = document.getElementById("heat-region");
   var heatIndEl = document.getElementById("heat-indicators");
   var heatSourceEl = document.getElementById("heat-source");
+  var climateRegionEl = document.getElementById("climate-region");
+  var climateIndEl = document.getElementById("climate-indicators");
+  var climateSourceEl = document.getElementById("climate-source");
 
   var OVERPASS = "https://overpass-api.de/api/interpreter";
   var GREEN_RADIUS = 500; // 公尺:服務圈半徑
   var MIN_PARK_M2 = 1000; // 有效公園最小面積(0.1 公頃,兒童遊樂場法定最小規模)
   var greenMarkers = L.layerGroup().addTo(map);
+
+  // Open-Meteo Archive(ERA5):免金鑰、支援瀏覽器 CORS;取近年逐日資料計算氣候背景值
+  var OPEN_METEO_ARCHIVE = "https://archive-api.open-meteo.com/v1/archive";
+  var CLIMATE_REF_START = "2020-01-01"; // 氣候參考期(5 個完整年,平滑單年異常)
+  var CLIMATE_REF_END = "2024-12-31";
+  var HEAT_DAY_TMAX_C = 32; // 高溫日門檻:單日最高溫 ≥ 32°C
 
   function resetGreenPanel() {
     greenRegionEl.textContent = t("green.hint");
@@ -608,6 +617,9 @@
     heatRegionEl.textContent = t("heat.hint");
     heatIndEl.innerHTML = "";
     heatSourceEl.textContent = "";
+    climateRegionEl.textContent = t("climate.hint");
+    climateIndEl.innerHTML = "";
+    climateSourceEl.textContent = "";
   }
 
   // 熱環境/健康研判:綠覆率(對 3-30-300 的 30% 目標)× 脆弱族群(高齡+幼年)
@@ -639,6 +651,110 @@
         elderly_share: elderly,
         child_share: child,
         vulnerability_level: level
+      };
+    }
+  }
+
+  // ---- 氣候背景(Open-Meteo ERA5)----
+  function avg(arr) {
+    return arr.length ? arr.reduce(function (s, v) { return s + v; }, 0) / arr.length : 0;
+  }
+
+  // 依基地中心點向 Open-Meteo Archive 查近年逐日資料,計算氣候背景值
+  function loadClimate(lat, lng) {
+    climateRegionEl.textContent = t("cl.loading");
+    climateIndEl.innerHTML = "";
+    climateSourceEl.textContent = "";
+    var params =
+      "latitude=" + lat.toFixed(4) + "&longitude=" + lng.toFixed(4) +
+      "&start_date=" + CLIMATE_REF_START + "&end_date=" + CLIMATE_REF_END +
+      "&daily=temperature_2m_mean,temperature_2m_max,precipitation_sum," +
+      "wind_direction_10m_dominant,shortwave_radiation_sum" +
+      "&timezone=auto";
+    var url = OPEN_METEO_ARCHIVE + "?" + params;
+
+    fetchWithTimeout(url, 25000)
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (data) { renderClimate(data); })
+      .catch(function (err) {
+        var aborted = err && err.name === "AbortError";
+        climateRegionEl.textContent = aborted ? t("cl.timeout") : t("cl.offline");
+        climateSourceEl.textContent = "";
+      });
+  }
+
+  function renderClimate(data) {
+    var d = (data && data.daily) || {};
+    var time = d.time || [];
+    var tmean = d.temperature_2m_mean || [];
+    var tmax = d.temperature_2m_max || [];
+    var precip = d.precipitation_sum || [];
+    var wdir = d.wind_direction_10m_dominant || [];
+    var rad = d.shortwave_radiation_sum || [];
+    if (!time.length) { climateRegionEl.textContent = t("cl.nodata"); return; }
+
+    // 參考期內年數(平均年值用)
+    var yearSet = {};
+    time.forEach(function (s) { yearSet[s.slice(0, 4)] = true; });
+    var nYears = Object.keys(yearSet).length || 1;
+
+    // 年均溫
+    var annualMean = avg(tmean.filter(function (v) { return v != null; }));
+
+    // 最熱月(逐月平均溫取最大)
+    var monSum = {}, monN = {};
+    time.forEach(function (s, i) {
+      var m = s.slice(5, 7), v = tmean[i];
+      if (v == null) return;
+      monSum[m] = (monSum[m] || 0) + v; monN[m] = (monN[m] || 0) + 1;
+    });
+    var hotMon = null, hotVal = -Infinity;
+    Object.keys(monSum).forEach(function (m) {
+      var a = monSum[m] / monN[m];
+      if (a > hotVal) { hotVal = a; hotMon = m; }
+    });
+
+    // 年降雨量(總和 / 年數)
+    var annualPrecip = precip.reduce(function (s, v) { return s + (v || 0); }, 0) / nYears;
+
+    // 高溫日數 / 年(單日最高溫 ≥ 門檻)
+    var heatDaysYr =
+      tmax.filter(function (v) { return v != null && v >= HEAT_DAY_TMAX_C; }).length / nYears;
+
+    // 盛行風向(來向,8 方位取眾數)
+    var sectors = [0, 0, 0, 0, 0, 0, 0, 0];
+    wdir.forEach(function (v) { if (v == null) return; sectors[Math.round(v / 45) % 8]++; });
+    var domIdx = sectors.indexOf(Math.max.apply(null, sectors));
+    var dirKeys = ["cl.N", "cl.NE", "cl.E", "cl.SE", "cl.S", "cl.SW", "cl.W", "cl.NW"];
+    var dirLabel = t(dirKeys[domIdx]);
+
+    // 日均日射量(MJ/m²)
+    var avgRad = avg(rad.filter(function (v) { return v != null; }));
+
+    climateRegionEl.innerHTML = t("cl.title", { y: nYears });
+    var html = "";
+    html += ind(t("cl.annualMean"), annualMean.toFixed(1), "°C");
+    html += ind(t("cl.hottest"), t("cl.mon" + hotMon) + " " + hotVal.toFixed(1), "°C");
+    html += ind(t("cl.heatDays"), heatDaysYr.toFixed(0), t("cl.daysYr"));
+    html += ind(t("cl.precip"), annualPrecip.toFixed(0), "mm");
+    html += ind(t("cl.wind"), dirLabel, "");
+    html += ind(t("cl.solar"), avgRad.toFixed(1), "MJ/m²");
+    climateIndEl.innerHTML = html;
+    climateSourceEl.innerHTML = t("cl.note", {
+      s: CLIMATE_REF_START.slice(0, 4), e: CLIMATE_REF_END.slice(0, 4)
+    });
+
+    if (lastAnalysis) {
+      lastAnalysis.climate = {
+        source: "Open-Meteo ERA5",
+        reference_period: CLIMATE_REF_START.slice(0, 4) + "-" + CLIMATE_REF_END.slice(0, 4),
+        annual_mean_temp_c: +annualMean.toFixed(1),
+        hottest_month: hotMon,
+        hottest_month_mean_c: +hotVal.toFixed(1),
+        heat_days_per_year_ge32c: +heatDaysYr.toFixed(0),
+        annual_precip_mm: +annualPrecip.toFixed(0),
+        dominant_wind_dir: dirLabel,
+        avg_daily_solar_mj_m2: +avgRad.toFixed(1)
       };
     }
   }
@@ -786,6 +902,7 @@
           }
         };
         renderHeat(coverage, lastRegionProps);
+        loadClimate((bb[1] + bb[3]) / 2, (bb[0] + bb[2]) / 2);
 
         greenSourceEl.innerHTML = t("g.noteSite");
       })
@@ -932,6 +1049,7 @@
           }
         };
         renderHeat(coverage, lastRegionProps);
+        loadClimate(lat, lng);
 
         greenSourceEl.innerHTML = t("g.noteRadius");
       })
@@ -1229,6 +1347,20 @@
         prow(t("r.incid500a"), pnum(g.incidental_area_500m_ha, t("r.uHa"))) +
         prow(t("r.covAll"), pnum(g.green_coverage_pct, " %")) +
         prow(t("r.access"), MET(g.has_300m_park_access)) +
+        "</table>";
+    }
+
+    var cl = lastAnalysis.climate;
+    if (cl) {
+      html += "<h2>" + t("r.hClimate") + "</h2><table class='summary'>" +
+        prow(t("r.clPeriod"), cl.reference_period || "—") +
+        prow(t("r.clMean"), pnum(cl.annual_mean_temp_c, " °C")) +
+        prow(t("r.clHottest"), cl.hottest_month
+          ? t("cl.mon" + cl.hottest_month) + " " + pnum(cl.hottest_month_mean_c) + " °C" : "—") +
+        prow(t("r.clHeatDays"), pnum(cl.heat_days_per_year_ge32c, " " + t("cl.daysYr"))) +
+        prow(t("r.clPrecip"), pnum(cl.annual_precip_mm, " mm")) +
+        prow(t("r.clWind"), cl.dominant_wind_dir || "—") +
+        prow(t("r.clSolar"), pnum(cl.avg_daily_solar_mj_m2, " MJ/m²")) +
         "</table>";
     }
 

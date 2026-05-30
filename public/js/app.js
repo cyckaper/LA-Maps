@@ -49,6 +49,9 @@
   var markersGroup = L.layerGroup().addTo(map);
   var drawnItems = new L.FeatureGroup().addTo(map);
 
+  // 最近一次分析焦點(放標記或畫基地時更新),供綠地分析使用
+  var lastFocus = null;
+
   // =========================================================
   //  底圖切換
   // =========================================================
@@ -135,6 +138,7 @@
         "<br>經度 " +
         e.latlng.lng.toFixed(5)
     ).openPopup();
+    lastFocus = e.latlng;
     // 點 → 查村里人口指標
     lookupVillage(e.latlng.lat, e.latlng.lng);
   });
@@ -175,6 +179,7 @@
     try {
       var c = turf.centroid(e.layer.toGeoJSON());
       var xy = c.geometry.coordinates; // [lng, lat]
+      lastFocus = L.latLng(xy[1], xy[0]);
       lookupTown(xy[1], xy[0]);
     } catch (err) {
       /* 忽略 */
@@ -229,6 +234,8 @@
     disableMarkerMode();
     computeArea();
     resetInfoPanel();
+    lastFocus = null;
+    resetGreenPanel();
     toolHint.textContent = "已清除所有標記與範圍。";
   });
 
@@ -470,6 +477,146 @@
       "鄉鎮市區 · " + (p.COUNTYNAME || "") + " <b>" + (p.TOWNNAME || "") + "</b>"
     );
   }
+
+  // =========================================================
+  //  第三階段 3a:開放空間 / 綠地可及性(OSM Overpass,瀏覽器即時查)
+  // =========================================================
+  var greenBtn = document.getElementById("green-btn");
+  var greenRegionEl = document.getElementById("green-region");
+  var greenIndEl = document.getElementById("green-indicators");
+  var greenSourceEl = document.getElementById("green-source");
+
+  var OVERPASS = "https://overpass-api.de/api/interpreter";
+  var GREEN_RADIUS = 500; // 公尺:服務圈半徑
+  var greenMarkers = L.layerGroup().addTo(map);
+
+  function resetGreenPanel() {
+    greenRegionEl.textContent = "先放標記或畫基地,再按「分析周邊綠地」。";
+    greenIndEl.innerHTML = "";
+    greenSourceEl.textContent = "";
+    greenMarkers.clearLayers();
+  }
+
+  // way 的 geometry(來自 out geom)轉成 turf polygon
+  function wayToPolygon(el) {
+    if (!el.geometry || el.geometry.length < 4) return null;
+    var ring = el.geometry.map(function (p) { return [p.lon, p.lat]; });
+    var first = ring[0], last = ring[ring.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first);
+    if (ring.length < 4) return null;
+    try {
+      var poly = turf.polygon([ring]);
+      poly.properties = { name: (el.tags && (el.tags.name || el.tags["name:zh"])) || "(未命名綠地)" };
+      return poly;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function nearestDist(focusPt, park) {
+    try {
+      if (turf.booleanPointInPolygon(focusPt, park)) return 0;
+      var ring = park.geometry.coordinates[0];
+      return turf.pointToLineDistance(focusPt, turf.lineString(ring), { units: "meters" });
+    } catch (e) {
+      try { return turf.distance(focusPt, turf.centroid(park), { units: "meters" }); }
+      catch (e2) { return Infinity; }
+    }
+  }
+
+  function ind(label, value, unit) {
+    return "<div class='ind'><dt>" + label + "</dt><dd>" + value +
+      (unit ? " <span class='u'>" + unit + "</span>" : "") + "</dd></div>";
+  }
+
+  function analyzeGreen() {
+    var focus = lastFocus || map.getCenter();
+    var lat = focus.lat, lng = focus.lng;
+    greenRegionEl.textContent = "查詢 OSM 綠地中…(半徑 " + GREEN_RADIUS + "m)";
+    greenIndEl.innerHTML = "";
+    greenSourceEl.textContent = "";
+
+    var le = '["leisure"~"^(park|garden|recreation_ground|nature_reserve|playground)$"]';
+    var lu = '["landuse"~"^(grass|forest|meadow|greenfield|village_green)$"]';
+    var around = "(around:" + GREEN_RADIUS + "," + lat + "," + lng + ")";
+    var q = "[out:json][timeout:25];(" +
+      "way" + le + around + ";" +
+      "way" + lu + around + ";" +
+      ");out geom;";
+    var url = OVERPASS + "?data=" + encodeURIComponent(q);
+
+    fetchWithTimeout(url, 25000)
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (data) {
+        var focusPt = turf.point([lng, lat]);
+        var parks = [];
+        (data.elements || []).forEach(function (el) {
+          if (el.type !== "way") return;
+          var poly = wayToPolygon(el);
+          if (!poly) return;
+          poly.properties.area_m2 = turf.area(poly);
+          poly.properties.dist = nearestDist(focusPt, poly);
+          parks.push(poly);
+        });
+
+        greenMarkers.clearLayers();
+        // 服務圈
+        L.circle([lat, lng], { radius: GREEN_RADIUS, color: "#3ba88f", weight: 1, fill: false, dashArray: "4" }).addTo(greenMarkers);
+
+        if (parks.length === 0) {
+          greenRegionEl.textContent = "周邊 " + GREEN_RADIUS + "m 內查無 OSM 綠地圖徵(或該區 OSM 標記不全)。";
+          greenSourceEl.textContent = "資料:OpenStreetMap(可能不完整)";
+          return;
+        }
+
+        parks.sort(function (a, b) { return a.properties.dist - b.properties.dist; });
+        var nearest = parks[0];
+        var within300 = parks.filter(function (p) { return p.properties.dist <= 300; });
+        var sum = function (arr) { return arr.reduce(function (s, p) { return s + p.properties.area_m2; }, 0); };
+        var area300 = sum(within300);
+        var area500 = sum(parks);
+        var has300 = within300.length > 0;
+        var nearestHa = nearest.properties.area_m2 / 10000;
+
+        // 在地圖上畫出綠地
+        parks.forEach(function (p) {
+          L.geoJSON(p, { style: { color: "#2e8b57", weight: 1, fillColor: "#3ba88f", fillOpacity: 0.35 } })
+            .bindPopup((p.properties.name || "綠地") + "<br>" +
+              (p.properties.area_m2 / 10000).toFixed(2) + " 公頃 · 距離 " +
+              Math.round(p.properties.dist) + " m")
+            .addTo(greenMarkers);
+        });
+
+        greenRegionEl.innerHTML = "焦點周邊 <b>" + GREEN_RADIUS + " m</b> 綠地分析";
+        var html = "";
+        html += ind("最近綠地距離", Math.round(nearest.properties.dist), "m");
+        html += ind("最近綠地面積", nearestHa.toFixed(2), "公頃");
+        html += ind("300m 內綠地", within300.length, "處");
+        html += ind("300m 內面積", (area300 / 10000).toFixed(2), "公頃");
+        html += ind("500m 內綠地", parks.length, "處");
+        html += ind("500m 內面積", (area500 / 10000).toFixed(2), "公頃");
+        html += ind("3-30-300 可及性", has300 ? "✓ 達標" : "✗ 不足", "");
+        // 法規對照:最近公園規模屬性
+        var scale = nearestHa >= 4 ? "達社區公園規模(≥4ha)"
+          : nearestHa >= 0.5 ? "達閭鄰公園規模(≥0.5ha)"
+          : nearestHa >= 0.1 ? "達兒童遊樂場規模(≥0.1ha)"
+          : "小於兒童遊樂場最小規模(<0.1ha)";
+        html += "<div class='ind' style='grid-column:1/-1'><dt>法規對照(最近綠地)</dt><dd style='font-size:12px;font-weight:400'>" + scale + "</dd></div>";
+        greenIndEl.innerHTML = html;
+
+        greenSourceEl.innerHTML =
+          "資料:OpenStreetMap(即時查詢,可能不完整)<br>" +
+          "準則:3-30-300(住家 300m 內應有綠地)、都市計畫定期通盤檢討辦法(兒童遊樂場≥0.1ha、閭鄰公園≥0.5ha、社區公園≥4ha);都市計畫法§45 公園綠地廣場兒童遊樂場合計≥計畫面積10%。";
+      })
+      .catch(function (err) {
+        var aborted = err && err.name === "AbortError";
+        greenRegionEl.textContent =
+          (aborted ? "OSM 查詢逾時" : "OSM 綠地服務暫時無法連線") + ",請稍後再試。";
+        greenSourceEl.textContent = "";
+      });
+  }
+
+  greenBtn.addEventListener("click", analyzeGreen);
 
   // 在地圖右下角標示資料來源(Leaflet attribution 已含 NLSC)
   map.attributionControl.setPrefix(

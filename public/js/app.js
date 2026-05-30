@@ -883,9 +883,9 @@
         var msg = String(err && err.message ? err.message : err);
         // GitHub Pages 上沒有後端函式,/api/analyze 會 404 → 友善提示
         aiOutput.innerHTML =
-          "<p class='ai-err'>AI 解讀目前無法使用。</p>" +
-          "<p class='ai-err'>此功能需部署於 <b>Cloudflare Pages</b> 並設定 <code>ANTHROPIC_API_KEY</code> 後才會運作" +
-          "(GitHub Pages 為純靜態,無後端)。</p>" +
+          "<p class='ai-err'>AI 解讀暫時無法使用。</p>" +
+          "<p class='ai-err'>請確認後端 <code>/api/analyze</code> 已部署,且已於主機後台設定 " +
+          "<code>ANTHROPIC_API_KEY</code> 環境變數並重新部署。</p>" +
           "<p class='ai-err' style='opacity:.7'>訊息:" + msg + "</p>";
         aiSource.textContent = "";
       })

@@ -187,6 +187,11 @@ html, body {
   color: var(--text-dim);
 }
 
+#green-btn {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
 /* ---------- 人口指標 ---------- */
 .info-region {
   margin: 0 0 10px;

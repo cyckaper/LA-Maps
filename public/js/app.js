@@ -975,19 +975,31 @@
     biodivIndEl.innerHTML = "";
     biodivSourceEl.textContent = "";
 
-    var geo = "lat=" + lat + "&lng=" + lng + "&radius=" + BIODIV_RADIUS_KM + "&verifiable=true";
-    var spCountUrl = INAT + "/observations/species_counts?" + geo + "&per_page=0";
+    var geo = "lat=" + lat + "&lng=" + lng + "&radius=" + BIODIV_RADIUS_KM + "&verifiable=true&locale=zh-TW";
+    // 取實際物種清單(species_counts 預設按觀測次數遞減 → 即代表性物種)
+    var spCountUrl = INAT + "/observations/species_counts?" + geo + "&per_page=20";
     var obsUrl = INAT + "/observations?" + geo + "&per_page=0";
-    var threatUrl = INAT + "/observations/species_counts?" + geo + "&threatened=true&per_page=0";
+    var threatUrl = INAT + "/observations/species_counts?" + geo + "&threatened=true&per_page=15";
+
+    function taxonName(rec) {
+      var t = rec && rec.taxon;
+      if (!t) return "?";
+      var common = t.preferred_common_name;
+      var sci = t.name;
+      if (common && sci) return common + "(" + sci + ")";
+      return common || sci || "?";
+    }
 
     Promise.all([
       fetchWithTimeout(spCountUrl, 20000).then(function (r) { return r.json(); }),
       fetchWithTimeout(obsUrl, 20000).then(function (r) { return r.json(); }),
       fetchWithTimeout(threatUrl, 20000).then(function (r) { return r.json(); })
     ]).then(function (res) {
-      var speciesCount = res[0] && res[0].total_results != null ? res[0].total_results : 0;
+      var spData = res[0] || {};
+      var speciesCount = spData.total_results != null ? spData.total_results : 0;
       var obsCount = res[1] && res[1].total_results != null ? res[1].total_results : 0;
-      var threatCount = res[2] && res[2].total_results != null ? res[2].total_results : 0;
+      var threatData = res[2] || {};
+      var threatCount = threatData.total_results != null ? threatData.total_results : 0;
 
       if (obsCount === 0) {
         biodivRegionEl.textContent = "周邊 " + BIODIV_RADIUS_KM + " km 內查無 iNaturalist 觀測紀錄(該區紀錄可能不足)。";
@@ -996,11 +1008,30 @@
         return;
       }
 
+      // 代表性物種(觀測最多者),跨分類群取前 10
+      var topSpecies = (spData.results || []).slice(0, 10).map(function (rec) {
+        return { name: taxonName(rec), count: rec.count || 0, group: (rec.taxon && rec.taxon.iconic_taxon_name) || "" };
+      });
+      // 受脅/保育物種名稱
+      var threatened = (threatData.results || []).map(function (rec) { return taxonName(rec); });
+
       biodivRegionEl.innerHTML = "焦點周邊 <b>" + BIODIV_RADIUS_KM + " km</b> 物種紀錄";
       var html = "";
       html += ind("物種數", speciesCount, "種");
       html += ind("觀測筆數", obsCount, "筆");
       html += ind("受脅/保育物種", threatCount, "種");
+
+      // 代表性物種清單(整列)
+      html += "<div class='biolist' style='grid-column:1/-1'><dt>代表性物種(觀測最多)</dt><dd><ol>" +
+        topSpecies.map(function (s) {
+          return "<li>" + s.name + " <span class='u'>" + s.count + " 筆</span></li>";
+        }).join("") + "</ol></dd></div>";
+
+      // 受脅物種清單(若有)
+      if (threatened.length) {
+        html += "<div class='biolist warn' style='grid-column:1/-1'><dt>受脅 / 保育物種</dt><dd><ul>" +
+          threatened.map(function (n) { return "<li>" + n + "</li>"; }).join("") + "</ul></dd></div>";
+      }
       biodivIndEl.innerHTML = html;
 
       // 各分類群物種數(逐一查 species_counts,平行)
@@ -1024,12 +1055,14 @@
         radius_km: BIODIV_RADIUS_KM,
         species_count: speciesCount,
         observation_count: obsCount,
-        threatened_species: threatCount
+        threatened_species: threatCount,
+        top_species: topSpecies.map(function (s) { return s.name + "(" + s.count + "筆)"; }),
+        threatened_list: threatened
       };
       if (lastAnalysis) lastAnalysis.biodiversity = lastBiodiv;
 
       biodivSourceEl.innerHTML =
-        "資料:iNaturalist(社群觀測,可驗證紀錄)。物種數=該範圍不重複物種;受脅物種依 IUCN/各地保育名錄標註。<br>" +
+        "資料:iNaturalist(社群觀測,可驗證紀錄)。代表性物種依觀測次數排序;受脅物種依 IUCN/各地保育名錄標註。<br>" +
         "※ 觀測涵蓋度依地區與觀察者活動而異,城市公園/校園通常較完整。";
     }).catch(function (err) {
       var aborted = err && err.name === "AbortError";
@@ -1218,6 +1251,8 @@
         prow("物種數", pnum(b.species_count, " 種")) +
         prow("觀測筆數", pnum(b.observation_count, " 筆")) +
         prow("受脅/保育物種", pnum(b.threatened_species, " 種")) +
+        (b.top_species && b.top_species.length ? prow("代表性物種(觀測最多)", b.top_species.join("、")) : "") +
+        (b.threatened_list && b.threatened_list.length ? prow("受脅/保育物種名錄", b.threatened_list.join("、")) : "") +
         (b.taxa ? prow("分類群(植/鳥/蟲…)",
           Object.keys(b.taxa).map(function (k) { return k + " " + b.taxa[k]; }).join("、")) : "") +
         "</table>";

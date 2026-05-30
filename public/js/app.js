@@ -665,6 +665,12 @@
         var nearestHa = nearestPark ? nearestPark.properties.area_m2 / 10000 : null;
         var has300 = parks300.length > 0;
 
+        // 零星綠地 = 非有效公園者(landuse 綠地 + 小於 0.1ha 的小塊)
+        var incidental = features.filter(function (f) {
+          return !(f.properties.category === "park" && f.properties.area_m2 >= MIN_PARK_M2);
+        });
+        var incidentalArea = sum(incidental);
+
         // 地圖:有效公園深綠、其餘綠地(零星/小塊)淺綠
         features.forEach(function (f) {
           var isEffPark = f.properties.category === "park" && f.properties.area_m2 >= MIN_PARK_M2;
@@ -681,19 +687,29 @@
         });
 
         greenRegionEl.innerHTML = "焦點周邊 <b>" + GREEN_RADIUS + " m</b> 綠地分析";
+        var ghdr = function (t) {
+          return "<div class='ghdr' style='grid-column:1/-1'>" + t + "</div>";
+        };
         var html = "";
+        // ── 公園(≥0.1ha)──
+        html += ghdr("公園(≥0.1ha)");
         if (nearestPark) {
           html += ind("最近公園距離", Math.round(nearestPark.properties.dist), "m");
           html += ind("最近公園面積", nearestHa.toFixed(2), "公頃");
         } else {
-          html += "<div class='ind' style='grid-column:1/-1'><dt>最近公園(≥0.1ha)</dt><dd>500m 內無</dd></div>";
+          html += "<div class='ind' style='grid-column:1/-1'><dt>最近公園</dt><dd>500m 內無 ≥0.1ha 公園</dd></div>";
         }
         html += ind("300m 內公園", parks300.length, "處");
         html += ind("500m 內公園", parks.length, "處");
-        html += ind("500m 公園面積", (parkArea500 / 10000).toFixed(2), "公頃");
+        html += ind("公園面積(500m)", (parkArea500 / 10000).toFixed(2), "公頃");
+        // ── 零星綠地 ──
+        html += ghdr("零星綠地(草地 · 小塊)");
+        html += ind("500m 內處數", incidental.length, "處");
+        html += ind("零星綠地面積", (incidentalArea / 10000).toFixed(2), "公頃");
+        // ── 整體 ──
+        html += ghdr("整體");
         html += ind("綠覆率(全綠地)", coverage.toFixed(1), "%");
         html += ind("3-30-300 可及性", has300 ? "✓ 達標" : "✗ 不足", "");
-        // 法規對照:最近公園規模屬性
         var scale = nearestPark == null ? "周邊 500m 內無 ≥0.1ha 公園"
           : nearestHa >= 4 ? "最近公園達社區公園規模(≥4ha)"
           : nearestHa >= 0.5 ? "最近公園達閭鄰公園規模(≥0.5ha)"
@@ -714,6 +730,8 @@
             park_count_300m: parks300.length,
             park_count_500m: parks.length,
             park_area_500m_ha: +(parkArea500 / 10000).toFixed(2),
+            incidental_count_500m: incidental.length,
+            incidental_area_500m_ha: +(incidentalArea / 10000).toFixed(2),
             green_total_500m_ha: +(greenTotalM2 / 10000).toFixed(2),
             green_coverage_pct: +coverage.toFixed(1),
             has_300m_park_access: has300
@@ -860,7 +878,9 @@
     html += "<h2>開放空間 · 綠地(半徑 " + pnum(g.radius_m, " m") + ",公園≥0.1ha)</h2><table class='summary'>" +
       prow("最近公園距離", pnum(g.nearest_park_dist_m, " m")) + prow("最近公園面積", pnum(g.nearest_park_area_ha, " 公頃")) +
       prow("300m 內公園", pnum(g.park_count_300m, " 處")) + prow("500m 內公園", pnum(g.park_count_500m, " 處")) +
-      prow("500m 公園面積", pnum(g.park_area_500m_ha, " 公頃")) +
+      prow("公園面積(500m)", pnum(g.park_area_500m_ha, " 公頃")) +
+      prow("零星綠地處數(500m)", pnum(g.incidental_count_500m, " 處")) +
+      prow("零星綠地面積(500m)", pnum(g.incidental_area_500m_ha, " 公頃")) +
       prow("綠覆率(全綠地)", pnum(g.green_coverage_pct, " %")) +
       prow("3-30-300 可及性", g.has_300m_park_access === undefined ? "—" : (g.has_300m_park_access ? "達標" : "不足")) +
       "</table>";

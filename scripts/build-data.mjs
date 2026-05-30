@@ -195,11 +195,15 @@ function pickSiteId(row) {
   return sid != null ? String(sid) : null;
 }
 
-// 候選期別:涵蓋「月別 yyymm」與「年度 yyy / yyy12」多種格式,
-// 因不同資料集發布頻率不同(單一年齡人口為年度資料)。
+// 已知最佳人口資料集:ODRP014「現住人口數按性別及年齡(村里)」,
+// 含 people_age_000..100 × 男女,可算出所有指標。優先直接使用,失敗才全面掃描。
+const PRIMARY_CODE = "ODRP014";
+
+// 退回機制:全面掃描候選代碼與期別(亦因應未來代碼/期別變動)
 const CODE_SWEEP = [];
 for (let i = 1; i <= 30; i++) CODE_SWEEP.push("ODRP" + String(i).padStart(3, "0"));
-const SWEEP_PERIODS = ["114", "113", "11412", "11312", "11411", "11410"];
+// 期別由近月優先,讓直接命中更快(月別資料用 yyymm、年度資料用 yyy)
+const SWEEP_PERIODS = ["11412", "11411", "11410", "11409", "11312", "114", "113"];
 
 // 單一代碼:逐期別嘗試,回傳第一個有資料者
 async function probeCode(code) {
@@ -236,18 +240,29 @@ async function discover() {
 
 async function loadPopulation() {
   const acc = new Map();
-  const found = await discover();
-  if (found.length === 0) {
-    warn("掃描所有候選資料集皆查無資料,將只輸出界線。");
-    return {
-      acc, dataset: null, period: null, sampleKeys: [],
-      sampleSiteId: null, sampleCodes: [], discovered: []
-    };
+
+  // 先直接嘗試已知最佳資料集,命中即用,省去全面掃描
+  let primary = await probeCode(PRIMARY_CODE);
+  let found;
+  if (primary) {
+    found = [primary];
+    DIAG.push({ ds: primary.code, ym: primary.period, ...primary.diag });
+    log(`直接命中 ${primary.code}/${primary.period}(${primary.cols} 欄)`);
+  } else {
+    log(`${PRIMARY_CODE} 未命中,改全面掃描 ODRP001-030…`);
+    found = await discover();
+    if (found.length === 0) {
+      warn("掃描所有候選資料集皆查無資料,將只輸出界線。");
+      return {
+        acc, dataset: null, period: null, sampleKeys: [],
+        sampleSiteId: null, sampleCodes: [], discovered: []
+      };
+    }
+    // 單一年齡人口欄位數最多(0~100歲 × 男女 → 200+ 欄),以欄位數最多者為主
+    found.sort((a, b) => b.cols - a.cols);
+    primary = found[0];
+    log(`選用人口資料集 ${primary.code}/${primary.period}(${primary.cols} 欄)`);
   }
-  // 單一年齡人口欄位數最多(0~100歲 × 男女 → 200+ 欄),以欄位數最多者為主要人口來源
-  found.sort((a, b) => b.cols - a.cols);
-  const primary = found[0];
-  log(`選用人口資料集 ${primary.code}/${primary.period}(${primary.cols} 欄)`);
 
   accumulateRows(primary.firstRows, acc);
   for (let page = 2; page <= 80; page++) {

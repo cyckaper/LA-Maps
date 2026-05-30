@@ -329,6 +329,16 @@ html, body {
   padding-bottom: 2px;
 }
 
+/* 物種清單(代表性 / 受脅物種) */
+.biolist { margin: 4px 0; }
+.biolist dt { font-size: 12px; font-weight: 600; color: var(--accent-hover); margin-bottom: 3px; }
+.biolist dd { margin: 0; }
+.biolist ol, .biolist ul { margin: 0; padding-left: 20px; }
+.biolist li { font-size: 12px; line-height: 1.5; }
+.biolist li .u { color: var(--text-dim); font-size: 11px; }
+.biolist.warn dt { color: var(--danger-hover); }
+.biolist.warn li { color: var(--danger-hover); }
+
 /* ---------- 版權 / 匯出 ---------- */
 #export-btn { width: 100%; margin-top: 8px; }
 .credits-list {

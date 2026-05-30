@@ -134,6 +134,7 @@
   var lastSiteAreaHa = null;
   var lastAnalysis = null;
   var lastRegionTitle = "";
+  var lastBiodiv = null;
 
   // =========================================================
   //  底圖切換
@@ -325,7 +326,9 @@
     resetInfoPanel();
     lastFocus = null;
     lastSitePolygon = null;
+    lastBiodiv = null;
     resetGreenPanel();
+    resetBiodivPanel();
     toolHint.textContent = "已清除所有標記與範圍。";
   });
 
@@ -945,6 +948,100 @@
   greenBtn.addEventListener("click", analyzeGreen);
 
   // =========================================================
+  //  生態 / 生物多樣性(iNaturalist,瀏覽器即時查,有 CORS)
+  // =========================================================
+  var biodivBtn = document.getElementById("biodiv-btn");
+  var biodivRegionEl = document.getElementById("biodiv-region");
+  var biodivIndEl = document.getElementById("biodiv-indicators");
+  var biodivSourceEl = document.getElementById("biodiv-source");
+  var INAT = "https://api.inaturalist.org/v1";
+  var BIODIV_RADIUS_KM = 1; // 物種查詢半徑(公里)
+  var ICONIC = [
+    { key: "Plantae", label: "植物" }, { key: "Aves", label: "鳥類" },
+    { key: "Insecta", label: "昆蟲" }, { key: "Mammalia", label: "哺乳" },
+    { key: "Amphibia", label: "兩棲" }, { key: "Reptilia", label: "爬蟲" }
+  ];
+
+  function resetBiodivPanel() {
+    biodivRegionEl.textContent = "先放標記或畫基地,再按「查詢周邊物種紀錄」。";
+    biodivIndEl.innerHTML = "";
+    biodivSourceEl.textContent = "";
+  }
+
+  function analyzeBiodiversity() {
+    var focus = lastFocus || map.getCenter();
+    var lat = focus.lat, lng = focus.lng;
+    biodivRegionEl.textContent = "查詢 iNaturalist 物種紀錄中…(半徑 " + BIODIV_RADIUS_KM + " km)";
+    biodivIndEl.innerHTML = "";
+    biodivSourceEl.textContent = "";
+
+    var geo = "lat=" + lat + "&lng=" + lng + "&radius=" + BIODIV_RADIUS_KM + "&verifiable=true";
+    var spCountUrl = INAT + "/observations/species_counts?" + geo + "&per_page=0";
+    var obsUrl = INAT + "/observations?" + geo + "&per_page=0";
+    var threatUrl = INAT + "/observations/species_counts?" + geo + "&threatened=true&per_page=0";
+
+    Promise.all([
+      fetchWithTimeout(spCountUrl, 20000).then(function (r) { return r.json(); }),
+      fetchWithTimeout(obsUrl, 20000).then(function (r) { return r.json(); }),
+      fetchWithTimeout(threatUrl, 20000).then(function (r) { return r.json(); })
+    ]).then(function (res) {
+      var speciesCount = res[0] && res[0].total_results != null ? res[0].total_results : 0;
+      var obsCount = res[1] && res[1].total_results != null ? res[1].total_results : 0;
+      var threatCount = res[2] && res[2].total_results != null ? res[2].total_results : 0;
+
+      if (obsCount === 0) {
+        biodivRegionEl.textContent = "周邊 " + BIODIV_RADIUS_KM + " km 內查無 iNaturalist 觀測紀錄(該區紀錄可能不足)。";
+        biodivSourceEl.textContent = "資料:iNaturalist(社群觀測,涵蓋度依地區而異)";
+        lastBiodiv = { radius_km: BIODIV_RADIUS_KM, species_count: 0, observation_count: 0 };
+        return;
+      }
+
+      biodivRegionEl.innerHTML = "焦點周邊 <b>" + BIODIV_RADIUS_KM + " km</b> 物種紀錄";
+      var html = "";
+      html += ind("物種數", speciesCount, "種");
+      html += ind("觀測筆數", obsCount, "筆");
+      html += ind("受脅/保育物種", threatCount, "種");
+      biodivIndEl.innerHTML = html;
+
+      // 各分類群物種數(逐一查 species_counts,平行)
+      Promise.all(ICONIC.map(function (t) {
+        return fetchWithTimeout(INAT + "/observations/species_counts?" + geo + "&iconic_taxa=" + t.key + "&per_page=0", 20000)
+          .then(function (r) { return r.json(); })
+          .then(function (j) { return { label: t.label, n: (j && j.total_results) || 0 }; })
+          .catch(function () { return { label: t.label, n: 0 }; });
+      })).then(function (groups) {
+        var taxa = {};
+        var gh = "<div class='ghdr' style='grid-column:1/-1'>分類群物種數</div>";
+        groups.forEach(function (g) {
+          taxa[g.label] = g.n;
+          gh += ind(g.label, g.n, "種");
+        });
+        biodivIndEl.innerHTML += gh;
+        if (lastBiodiv) lastBiodiv.taxa = taxa;
+      });
+
+      lastBiodiv = {
+        radius_km: BIODIV_RADIUS_KM,
+        species_count: speciesCount,
+        observation_count: obsCount,
+        threatened_species: threatCount
+      };
+      if (lastAnalysis) lastAnalysis.biodiversity = lastBiodiv;
+
+      biodivSourceEl.innerHTML =
+        "資料:iNaturalist(社群觀測,可驗證紀錄)。物種數=該範圍不重複物種;受脅物種依 IUCN/各地保育名錄標註。<br>" +
+        "※ 觀測涵蓋度依地區與觀察者活動而異,城市公園/校園通常較完整。";
+    }).catch(function (err) {
+      var aborted = err && err.name === "AbortError";
+      biodivRegionEl.textContent =
+        (aborted ? "iNaturalist 查詢逾時" : "iNaturalist 服務暫時無法連線") + ",請稍後再試。";
+      biodivSourceEl.textContent = "";
+    });
+  }
+
+  biodivBtn.addEventListener("click", analyzeBiodiversity);
+
+  // =========================================================
   //  第三階段 3c:AI 解讀(呼叫 /api/analyze,需 Cloudflare Pages 部署)
   // =========================================================
   var aiBtn = document.getElementById("ai-btn");
@@ -1115,12 +1212,23 @@
       prow("高溫脆弱度", h.vulnerability_level || "—") +
       "</table>";
 
+    var b = lastAnalysis.biodiversity;
+    if (b) {
+      html += "<h2>生態 · 生物多樣性(半徑 " + pnum(b.radius_km, " km") + ")</h2><table class='summary'>" +
+        prow("物種數", pnum(b.species_count, " 種")) +
+        prow("觀測筆數", pnum(b.observation_count, " 筆")) +
+        prow("受脅/保育物種", pnum(b.threatened_species, " 種")) +
+        (b.taxa ? prow("分類群(植/鳥/蟲…)",
+          Object.keys(b.taxa).map(function (k) { return k + " " + b.taxa[k]; }).join("、")) : "") +
+        "</table>";
+    }
+
     html += "<h2>AI 綜合解讀</h2><div>" + aiHtml + "</div>";
 
     html += "<h2>資料來源與免責</h2><p class='src'>" +
       "底圖:NLSC;界線:NLSC / taiwan-atlas;人口:內政部戶政司 ODRP014(11412);" +
-      "綠地:© OpenStreetMap 貢獻者(ODbL)/ Overpass;地名:OSM Nominatim;AI:Anthropic Claude。<br>" +
-      "免責:綠地與綠覆率為即時查詢之下限估計;熱環境/健康為研判而非實測。本報告僅供規劃參考,不構成正式法定文件。</p>";
+      "綠地:© OpenStreetMap 貢獻者(ODbL)/ Overpass;地名:OSM Nominatim;生物多樣性:iNaturalist;AI:Anthropic Claude。<br>" +
+      "免責:綠地與綠覆率為即時查詢之下限估計;熱環境/健康為研判而非實測;iNaturalist 觀測涵蓋度依地區而異。本報告僅供規劃參考,不構成正式法定文件。</p>";
     return html;
   }
 

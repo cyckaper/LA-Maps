@@ -10,7 +10,7 @@
   <!-- Leaflet.draw -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 
-  <link rel="stylesheet" href="./css/style.css?v=4d4" />
+  <link rel="stylesheet" href="./css/style.css?v=4e" />
 </head>
 <body>
   <div id="app">
@@ -99,6 +99,15 @@
         <p class="hint" id="heat-source"></p>
       </section>
 
+      <!-- 生態 / 生物多樣性 (iNaturalist) -->
+      <section class="panel">
+        <h2>生態 · 生物多樣性</h2>
+        <button id="biodiv-btn" class="tool-btn" type="button">查詢周邊物種紀錄</button>
+        <p class="info-region" id="biodiv-region">先放標記或畫基地,再按「查詢周邊物種紀錄」。</p>
+        <dl class="indicators" id="biodiv-indicators"></dl>
+        <p class="hint" id="biodiv-source"></p>
+      </section>
+
       <!-- AI 解讀 -->
       <section class="panel">
         <h2>AI 解讀</h2>
@@ -118,6 +127,7 @@
           <li>地質圖層(土壤液化/活動斷層):經濟部地質調查及礦業管理中心</li>
           <li>綠地圖徵:© OpenStreetMap 貢獻者(ODbL),經 Overpass API 即時查詢</li>
           <li>地名搜尋:OpenStreetMap Nominatim</li>
+          <li>生物多樣性:iNaturalist(CC 觀測資料)</li>
           <li>AI 解讀:Anthropic Claude</li>
         </ul>
         <p class="disclaimer">
@@ -144,6 +154,6 @@
   <!-- Marked (Markdown 渲染 AI 報告) -->
   <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
 
-  <script src="./js/app.js?v=4d4"></script>
+  <script src="./js/app.js?v=4e"></script>
 </body>
 </html>

@@ -99,9 +99,10 @@ function geomArea(geom) {
 function accumulateRows(rows, acc) {
   let detected = null;
   for (const row of rows) {
-    // site_id / 區域代碼
+    // 區域代碼(優先 district_code 數字碼;site_id 常為中文名稱不可當鍵)
     const sid =
-      row.site_id || row.SITE_ID || row.village_id || row.area_code || row.code;
+      row.district_code || row.DISTRICT_CODE || row.site_id || row.SITE_ID ||
+      row.village_id || row.area_code || row.code;
     if (!sid) continue;
     const key = String(sid).trim();
     let rec = acc.get(key);
@@ -196,42 +197,64 @@ function pickSiteId(row) {
 
 // 候選期別:涵蓋「月別 yyymm」與「年度 yyy / yyy12」多種格式,
 // 因不同資料集發布頻率不同(單一年齡人口為年度資料)。
-function periodCandidates() {
-  const out = recentYyymm(8); // 近 8 個月別
-  for (let y = 114; y >= 110; y--) {
-    out.push(String(y));        // 年度三碼,如 113
-    out.push(String(y) + "12"); // 年底月別,如 11312
+const CODE_SWEEP = [];
+for (let i = 1; i <= 30; i++) CODE_SWEEP.push("ODRP" + String(i).padStart(3, "0"));
+const SWEEP_PERIODS = ["114", "113", "11412", "11312", "11411", "11410"];
+
+async function discover() {
+  const found = [];
+  for (const code of CODE_SWEEP) {
+    for (const ym of SWEEP_PERIODS) {
+      const p = await probe(`${RIS_BASE}/${code}/${ym}?page=1`);
+      if (p.rows > 0 && p.data) {
+        found.push({
+          code, period: ym, cols: (p.keys || []).length,
+          keys: p.keys, firstRows: p.data
+        });
+        DIAG.push({ ds: code, ym, ...diagOf(p) });
+        log(`發現 ${code}/${ym}: ${p.rows} 列, ${(p.keys || []).length} 欄`);
+        break; // 此代碼已找到資料,換下一個
+      }
+    }
   }
-  return out;
+  return found;
 }
 
 async function loadPopulation() {
   const acc = new Map();
-  for (const ds of RIS_DATASETS) {
-    for (const ym of periodCandidates()) {
-      const base = `${RIS_BASE}/${ds}/${ym}`;
-      const first = await probe(base + "?page=1");
-      DIAG.push({ ds, ym, ...diagOf(first) });
-      log(`嘗試 ${ds}/${ym}: status=${first.status} rows=${first.rows} err=${first.error || "-"}`);
-      if (first.rows > 0 && first.data) {
-        accumulateRows(first.data, acc);
-        // 後續頁
-        for (let page = 2; page <= 60; page++) {
-          const p = await probe(base + `?page=${page}`);
-          if (!(p.rows > 0 && p.data)) break;
-          accumulateRows(p.data, acc);
-        }
-        log(`人口資料 ${ds}/${ym}:site 數 ${acc.size}`);
-        log("樣本欄位:", (first.keys || []).join(", "));
-        return {
-          acc, dataset: ds, period: ym,
-          sampleKeys: first.keys || [], sampleSiteId: pickSiteId(first.data[0])
-        };
-      }
-    }
+  const found = await discover();
+  if (found.length === 0) {
+    warn("掃描所有候選資料集皆查無資料,將只輸出界線。");
+    return {
+      acc, dataset: null, period: null, sampleKeys: [],
+      sampleSiteId: null, sampleCodes: [], discovered: []
+    };
   }
-  warn("所有候選人口資料來源皆無法取得,將只輸出界線(指標留空)。請見 meta.json 的 fetch_diagnostics。");
-  return { acc, dataset: null, period: null, sampleKeys: [], sampleSiteId: null };
+  // 單一年齡人口欄位數最多(0~100歲 × 男女 → 200+ 欄),以欄位數最多者為主要人口來源
+  found.sort((a, b) => b.cols - a.cols);
+  const primary = found[0];
+  log(`選用人口資料集 ${primary.code}/${primary.period}(${primary.cols} 欄)`);
+
+  accumulateRows(primary.firstRows, acc);
+  for (let page = 2; page <= 80; page++) {
+    const p = await probe(`${RIS_BASE}/${primary.code}/${primary.period}?page=${page}`);
+    if (!(p.rows > 0 && p.data)) break;
+    accumulateRows(p.data, acc);
+  }
+  log(`人口資料 ${primary.code}/${primary.period}:對應鍵數 ${acc.size}`);
+
+  return {
+    acc, dataset: primary.code, period: primary.period,
+    sampleKeys: primary.keys || [],
+    sampleSiteId:
+      primary.firstRows[0] && primary.firstRows[0].site_id != null
+        ? String(primary.firstRows[0].site_id)
+        : null,
+    sampleCodes: primary.firstRows.slice(0, 3).map(
+      (r) => r.district_code || r.site_id || null
+    ),
+    discovered: found.map((f) => ({ code: f.code, period: f.period, cols: f.cols }))
+  };
 }
 
 // ---------- 指標計算 ----------
@@ -276,7 +299,8 @@ async function main() {
   log("鄉鎮樣本屬性:", JSON.stringify(towns.features[0] && towns.features[0].properties));
   log("村里樣本屬性:", JSON.stringify(villages.features[0] && villages.features[0].properties));
 
-  const { acc, dataset, period, sampleKeys, sampleSiteId } = await loadPopulation();
+  const { acc, dataset, period, sampleKeys, sampleSiteId, sampleCodes, discovered } =
+    await loadPopulation();
 
   // 村里:逐一對應 + 計算面積/指標;同時依 TOWNCODE 聚合到鄉鎮
   const townAgg = new Map(); // TOWNCODE -> {hh,male,female,a0_14,a15_64,a65, area}
@@ -345,6 +369,8 @@ async function main() {
         population_period: period,
         population_sample_keys: sampleKeys,
         population_sample_site_id: sampleSiteId,
+        population_sample_codes: sampleCodes,
+        discovered_datasets: discovered,
         town_count: towns.features.length,
         village_count: villages.features.length,
         village_match_rate: matchRate + "%",

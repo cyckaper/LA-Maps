@@ -24,7 +24,10 @@ const SRC = {
 
 // 戶政司 rs-opendata:村里戶數、單一年齡人口。逐月嘗試最近數期,取第一個有資料者。
 const RIS_BASE = "https://www.ris.gov.tw/rs-opendata/api/v1/datastore";
-const RIS_DATASETS = ["ODRP019", "ODRP005"]; // 候選資料集代碼(單一年齡人口)
+const RIS_DATASETS = ["ODRP005", "ODRP019"]; // 候選資料集代碼(單一年齡人口)
+
+// 抓取診斷(寫入 meta.json,供建置後校驗實際情形)
+const DIAG = [];
 
 // ---------- 共用 ----------
 function log(...a) { console.log("[build-data]", ...a); }
@@ -136,35 +139,88 @@ function accumulateRows(rows, acc) {
   return detected;
 }
 
+// 帶逾時的單次抓取,回傳豐富診斷
+async function probe(url) {
+  const out = {
+    url, status: null, ctype: null, respKeys: null,
+    code: null, msg: null, rows: 0, keys: null, snippet: null, error: null, data: null
+  };
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "LA-Maps-build/1.0", Accept: "application/json" },
+      signal: AbortSignal.timeout(15000)
+    });
+    out.status = res.status;
+    out.ctype = res.headers.get("content-type");
+    const text = await res.text();
+    out.snippet = text.slice(0, 220);
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      out.error = "JSON parse failed";
+      return out;
+    }
+    out.respKeys = Object.keys(data);
+    out.code = data.responseCode != null ? String(data.responseCode) : null;
+    out.msg = data.responseMessage != null ? String(data.responseMessage) : null;
+    const rows =
+      data.responseData || (data.result && data.result.records) || data.records ||
+      (Array.isArray(data) ? data : []);
+    if (Array.isArray(rows)) {
+      out.rows = rows.length;
+      if (rows.length) out.keys = Object.keys(rows[0]);
+      out.data = rows;
+    }
+  } catch (e) {
+    out.error = String(e && e.message ? e.message : e);
+  }
+  return out;
+}
+
+function diagOf(p) {
+  // 移除大筆 data 後存入診斷
+  return {
+    url: p.url, status: p.status, ctype: p.ctype, respKeys: p.respKeys,
+    responseCode: p.code, responseMessage: p.msg, rows: p.rows, keys: p.keys,
+    snippet: p.snippet, error: p.error
+  };
+}
+
+function pickSiteId(row) {
+  if (!row) return null;
+  const sid =
+    row.site_id || row.SITE_ID || row.village_id || row.area_code || row.code;
+  return sid != null ? String(sid) : null;
+}
+
 async function loadPopulation() {
   const acc = new Map();
   for (const ds of RIS_DATASETS) {
-    for (const ym of recentYyymm(6)) {
-      try {
-        let page = 1, got = 0, sample = null;
-        for (;;) {
-          const url = `${RIS_BASE}/${ds}/${ym}?page=${page}`;
-          const data = await fetchRetry(url);
-          const rows = data.responseData || data.result?.records || data.records || [];
-          if (!Array.isArray(rows) || rows.length === 0) break;
-          if (!sample) sample = rows[0];
-          accumulateRows(rows, acc);
-          got += rows.length;
-          page++;
-          if (page > 60) break; // 安全上限
+    for (const ym of recentYyymm(4)) {
+      const base = `${RIS_BASE}/${ds}/${ym}`;
+      const first = await probe(base + "?page=1");
+      DIAG.push({ ds, ym, ...diagOf(first) });
+      log(`嘗試 ${ds}/${ym}: status=${first.status} rows=${first.rows} err=${first.error || "-"}`);
+      if (first.rows > 0 && first.data) {
+        accumulateRows(first.data, acc);
+        // 後續頁
+        for (let page = 2; page <= 60; page++) {
+          const p = await probe(base + `?page=${page}`);
+          if (!(p.rows > 0 && p.data)) break;
+          accumulateRows(p.data, acc);
         }
-        if (got > 0) {
-          log(`人口資料 ${ds}/${ym}:取得 ${got} 列,site 數 ${acc.size}`);
-          log("樣本欄位:", Object.keys(sample).join(", "));
-          return { acc, dataset: ds, period: ym, sampleKeys: Object.keys(sample) };
-        }
-      } catch (e) {
-        // 這個年月沒有,換下一個
+        log(`人口資料 ${ds}/${ym}:site 數 ${acc.size}`);
+        log("樣本欄位:", (first.keys || []).join(", "));
+        return {
+          acc, dataset: ds, period: ym,
+          sampleKeys: first.keys || [], sampleSiteId: pickSiteId(first.data[0])
+        };
       }
     }
   }
-  warn("所有候選人口資料來源皆無法取得,將只輸出界線(指標留空)。");
-  return { acc, dataset: null, period: null, sampleKeys: [] };
+  warn("所有候選人口資料來源皆無法取得,將只輸出界線(指標留空)。請見 meta.json 的 fetch_diagnostics。");
+  return { acc, dataset: null, period: null, sampleKeys: [], sampleSiteId: null };
 }
 
 // ---------- 指標計算 ----------
@@ -209,7 +265,7 @@ async function main() {
   log("鄉鎮樣本屬性:", JSON.stringify(towns.features[0] && towns.features[0].properties));
   log("村里樣本屬性:", JSON.stringify(villages.features[0] && villages.features[0].properties));
 
-  const { acc, dataset, period, sampleKeys } = await loadPopulation();
+  const { acc, dataset, period, sampleKeys, sampleSiteId } = await loadPopulation();
 
   // 村里:逐一對應 + 計算面積/指標;同時依 TOWNCODE 聚合到鄉鎮
   const townAgg = new Map(); // TOWNCODE -> {hh,male,female,a0_14,a15_64,a65, area}
@@ -277,9 +333,15 @@ async function main() {
           : "(人口資料未取得)",
         population_period: period,
         population_sample_keys: sampleKeys,
+        population_sample_site_id: sampleSiteId,
         town_count: towns.features.length,
         village_count: villages.features.length,
-        village_match_rate: matchRate + "%"
+        village_match_rate: matchRate + "%",
+        // 界線代碼樣本(供與人口 site_id 比對格式)
+        boundary_villcode_samples: villages.features.slice(0, 3).map((f) => f.properties.VILLCODE),
+        boundary_towncode_samples: towns.features.slice(0, 3).map((f) => f.properties.TOWNCODE),
+        // 人口抓取診斷(每個 dataset/月份首頁的 HTTP 狀態與回應摘要)
+        fetch_diagnostics: DIAG
       },
       null,
       2

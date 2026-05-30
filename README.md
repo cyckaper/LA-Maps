@@ -10,10 +10,11 @@
 
 | 網址 | 後端 | AI 解讀 | 用途 |
 |---|---|---|---|
-| **https://la-maps.pages.dev** | ✅ Cloudflare Pages Functions | ✅ 可用 | **主要版本** |
+| **https://healsdesign.org**(Netlify) | ✅ Netlify Functions | ✅ 可用 | **主要版本** |
+| https://la-maps.pages.dev | ✅ Cloudflare Pages | ✅ 可用 | 備援 |
 | https://cyckaper.github.io/LA-Maps/ | ❌ 純靜態 | ❌ 不可 | 前端預覽 |
 
-兩者功能相同,差別僅在 AI 解讀需要後端(金鑰)。
+功能相同,差別僅在 AI 解讀需要後端(金鑰)。
 
 ---
 
@@ -115,7 +116,13 @@ npx serve public          # 或 python3 -m http.server -d public
 
 ## 部署
 
-### Cloudflare Pages(主要,含 AI)
+### Netlify(主要,含 AI,掛自有網域 healsdesign.org)
+1. Add new site → Import an existing project → 選本 repo(`netlify.toml` 已含 build 設定)
+2. Site configuration → Environment variables:`ANTHROPIC_API_KEY` = Anthropic API 金鑰 → 重新部署
+3. 後端 `netlify/functions/analyze.mjs` 以 Functions 2.0 的 `config.path` 直接掛在 `/api/analyze`
+4. Domain management → Add a domain → `healsdesign.org`(DNS 已在 Netlify,SSL 自動)
+
+### Cloudflare Pages(備援,含 AI)
 1. Workers & Pages → Create → Pages → Connect to Git → 選本 repo
 2. Build 設定:
    - **Build command**:`npm install && node scripts/build-data.mjs`

@@ -50,18 +50,32 @@
   var currentBase = "EMAP";
   baseLayers.EMAP.addTo(map);
 
-  // 疊圖圖層(NLSC WMTS,可多選 + 共用透明度)
+  // 疊圖圖層(NLSC WMTS + 地質調查所 WMS,可多選 + 共用透明度)
+  var GEO_WMS = "https://geomap.gsmma.gov.tw/mapguide/mapagent/mapagent.fcgi";
+  function geologyWms(layerName, opacity) {
+    return L.tileLayer.wms(GEO_WMS, {
+      layers: layerName,
+      format: "image/png",
+      transparent: true,
+      version: "1.1.1",
+      crs: L.CRS.EPSG4326,
+      opacity: opacity,
+      attribution: "地質圖 © 經濟部地質調查及礦業管理中心"
+    });
+  }
   var OVERLAY_DEFS = [
-    { id: "LUIMAP", label: "國土利用調查(綠地/土地利用)" },
-    { id: "LUIMAP02", label: "國土利用-森林" },
-    { id: "SCHOOL", label: "各級學校範圍(學區)" },
-    { id: "LANDSECT", label: "段籍圖(地籍)" },
-    { id: "URBAN", label: "都市計畫土地使用分區(實驗)" }
+    { id: "LUIMAP", label: "國土利用調查(綠地/土地利用)", type: "nlsc" },
+    { id: "SCHOOL", label: "各級學校範圍(學區)", type: "nlsc" },
+    { id: "LANDSECT", label: "段籍圖(地籍)", type: "nlsc" },
+    { id: "LIQUEFACTION", label: "土壤液化潛勢", type: "geo", layer: "Geomap_Envi_Soil_liquefatcion_2021" },
+    { id: "FAULT", label: "活動斷層分布(2021)", type: "geo", layer: "25K_Geomap_fault_2021" }
   ];
   var overlayOpacity = 0.55;
   var overlays = {};
   OVERLAY_DEFS.forEach(function (def) {
-    var layer = nlscLayer(def.id, { opacity: overlayOpacity });
+    var layer = def.type === "geo"
+      ? geologyWms(def.layer, overlayOpacity)
+      : nlscLayer(def.id, { opacity: overlayOpacity });
     var rec = { layer: layer, errors: 0 };
     layer.on("tileerror", function () {
       rec.errors++;

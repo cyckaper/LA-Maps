@@ -52,17 +52,54 @@
 
   // 疊圖圖層(NLSC WMTS + 地質調查所 WMS,可多選 + 共用透明度)
   var GEO_WMS = "https://geomap.gsmma.gov.tw/mapguide/mapagent/mapagent.fcgi";
-  function geologyWms(layerName, opacity) {
-    return L.tileLayer.wms(GEO_WMS, {
-      layers: layerName,
-      format: "image/png",
-      transparent: true,
-      version: "1.3.0",
-      crs: L.CRS.EPSG4326,
-      opacity: opacity,
-      attribution: "地質圖 © 經濟部地質調查及礦業管理中心"
-    });
+  var overlayOpacity = 0.55;
+
+  function warnOverlay(id) {
+    var w = document.getElementById("ovwarn-" + id);
+    if (w) w.textContent = "⚠ 無法載入(端點待確認)";
   }
+
+  // NLSC 圖磚疊圖(標準 XYZ tile)
+  function nlscOverlay(layerId, def) {
+    var layer = nlscLayer(layerId, { opacity: overlayOpacity });
+    layer.on("tileerror", function () { warnOverlay(def.id); });
+    return {
+      active: false,
+      add: function () { layer.addTo(map); layer.bringToFront(); this.active = true; },
+      remove: function () { map.removeLayer(layer); this.active = false; },
+      setOpacity: function (o) { layer.setOpacity(o); },
+      front: function () { if (map.hasLayer(layer)) layer.bringToFront(); }
+    };
+  }
+
+  // 地質 WMS:改用「單張影像疊圖」(複製確認可用的 GetMap 請求),
+  // 避免 Leaflet 切磚式 WMS 在 MapGuide 回空白圖磚
+  function geoOverlay(layerName, def) {
+    var img = null;
+    var self = { active: false };
+    function refresh() {
+      if (!self.active) return;
+      var b = map.getBounds(), s = map.getSize();
+      var url = GEO_WMS + "?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&STYLES=" +
+        "&CRS=EPSG:4326&FORMAT=image/png&TRANSPARENT=true" +
+        "&WIDTH=" + s.x + "&HEIGHT=" + s.y +
+        "&LAYERS=" + encodeURIComponent(layerName) +
+        "&BBOX=" + b.getSouth() + "," + b.getWest() + "," + b.getNorth() + "," + b.getEast();
+      if (img) map.removeLayer(img);
+      img = L.imageOverlay(url, b, { opacity: overlayOpacity, interactive: false });
+      img.on("error", function () { warnOverlay(def.id); });
+      img.addTo(map);
+    }
+    self.add = function () { self.active = true; refresh(); map.on("moveend", refresh); };
+    self.remove = function () {
+      self.active = false; map.off("moveend", refresh);
+      if (img) { map.removeLayer(img); img = null; }
+    };
+    self.setOpacity = function (o) { if (img) img.setOpacity(o); };
+    self.front = function () { if (img) img.bringToFront(); };
+    return self;
+  }
+
   var OVERLAY_DEFS = [
     { id: "LUIMAP", label: "國土利用調查(綠地/土地利用)", type: "nlsc" },
     { id: "SCHOOL", label: "各級學校範圍(學區)", type: "nlsc" },
@@ -71,25 +108,15 @@
     { id: "FAULT", label: "活動斷層分布線(2021)", type: "geo", layer: "WMS/25K_Geomap_fault_2021" },
     { id: "FAULT_ZONE", label: "活動斷層地質敏感區(帶狀)", type: "geo", layer: "WMS/Sensitive_area_fault" }
   ];
-  var overlayOpacity = 0.55;
   var overlays = {};
   OVERLAY_DEFS.forEach(function (def) {
-    var layer = def.type === "geo"
-      ? geologyWms(def.layer, overlayOpacity)
-      : nlscLayer(def.id, { opacity: overlayOpacity });
-    var rec = { layer: layer, errors: 0 };
-    layer.on("tileerror", function () {
-      rec.errors++;
-      if (rec.errors === 1) {
-        var w = document.getElementById("ovwarn-" + def.id);
-        if (w) w.textContent = "⚠ 無法載入(端點待確認)";
-      }
-    });
-    overlays[def.id] = rec;
+    overlays[def.id] = def.type === "geo"
+      ? geoOverlay(def.layer, def)
+      : nlscOverlay(def.id, def);
   });
   function bringOverlaysToFront() {
     OVERLAY_DEFS.forEach(function (def) {
-      if (map.hasLayer(overlays[def.id].layer)) overlays[def.id].layer.bringToFront();
+      if (overlays[def.id].active) overlays[def.id].front();
     });
   }
 
@@ -135,12 +162,7 @@
     var id = e.target.getAttribute && e.target.getAttribute("data-ov");
     if (!id) return;
     var rec = overlays[id];
-    if (e.target.checked) {
-      rec.layer.addTo(map);
-      rec.layer.bringToFront();
-    } else {
-      map.removeLayer(rec.layer);
-    }
+    if (e.target.checked) { rec.add(); } else { rec.remove(); }
   });
 
   var ovOpacity = document.getElementById("ov-opacity");
@@ -148,7 +170,7 @@
   ovOpacity.addEventListener("input", function () {
     overlayOpacity = parseFloat(ovOpacity.value);
     ovOpacityVal.textContent = overlayOpacity.toFixed(2);
-    OVERLAY_DEFS.forEach(function (def) { overlays[def.id].layer.setOpacity(overlayOpacity); });
+    OVERLAY_DEFS.forEach(function (def) { overlays[def.id].setOpacity(overlayOpacity); });
   });
 
   // =========================================================

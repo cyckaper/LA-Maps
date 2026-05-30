@@ -65,6 +65,7 @@
   // 最近一次基地面積(公頃)與彙整分析資料(供 AI 解讀使用)
   var lastSiteAreaHa = null;
   var lastAnalysis = null;
+  var lastRegionTitle = "";
 
   // =========================================================
   //  底圖切換
@@ -376,6 +377,7 @@
 
   function renderIndicators(props, titleHtml) {
     lastRegionProps = props;
+    lastRegionTitle = titleHtml.replace(/<[^>]+>/g, "").trim();
     infoRegionEl.innerHTML = titleHtml;
     var html = "";
     for (var i = 0; i < INDICATOR_DEFS.length; i++) {
@@ -768,6 +770,75 @@
         aiSource.textContent = "";
       })
       .finally(function () { aiBtn.disabled = false; });
+  });
+
+  // ---- 報告匯出 / 列印(可存 PDF)----
+  var exportBtn = document.getElementById("export-btn");
+  var printArea = document.getElementById("print-area");
+
+  function pnum(v, suffix) {
+    return v === null || v === undefined ? "—" : v + (suffix || "");
+  }
+  function prow(label, val) {
+    return "<tr><th>" + label + "</th><td>" + val + "</td></tr>";
+  }
+
+  function buildPrintArea() {
+    if (!lastAnalysis) return false;
+    var p = lastAnalysis.population || {};
+    var g = lastAnalysis.green || {};
+    var h = lastAnalysis.heat || {};
+    var focus = lastAnalysis.focus || {};
+    var now = new Date();
+    var aiHasReport = aiOutput.innerHTML.trim() &&
+      !aiOutput.querySelector(".ai-err") && !aiOutput.querySelector(".ai-loading");
+    var aiHtml = aiHasReport ? aiOutput.innerHTML : "<p class='pr-muted'>(尚未產生 AI 報告)</p>";
+
+    var html = "<div class='pr-doc'>";
+    html += "<h1>基地分析報告</h1>";
+    html += "<p class='pr-meta'>" + (lastRegionTitle || "") +
+      "<br>座標:" + pnum(focus.lat) + "°N, " + pnum(focus.lng) + "°E" +
+      (lastSiteAreaHa != null ? " · 基地面積 " + lastSiteAreaHa + " 公頃" : "") +
+      "<br>產製時間:" + now.toLocaleString("zh-TW") + "</p>";
+
+    html += "<h2>人口與指標</h2><table>" +
+      prow("總人口", pnum(p.pop, " 人")) + prow("戶數", pnum(p.households, " 戶")) +
+      prow("人口密度", pnum(p.density, " 人/km²")) + prow("性別比", pnum(p.sex_ratio)) +
+      prow("老化指數", pnum(p.aging_index)) + prow("扶養比", pnum(p.dep_ratio, " %")) +
+      prow("高齡比例(65+)", pnum(p.elderly_share, " %")) + prow("幼年比例(0-14)", pnum(p.child_share, " %")) +
+      "</table>";
+
+    html += "<h2>開放空間 · 綠地(半徑 " + pnum(g.radius_m, " m") + ")</h2><table>" +
+      prow("最近綠地距離", pnum(g.nearest_dist_m, " m")) + prow("最近綠地面積", pnum(g.nearest_area_ha, " 公頃")) +
+      prow("300m 內綠地", pnum(g.count_300m, " 處")) + prow("300m 內面積", pnum(g.area_300m_ha, " 公頃")) +
+      prow("500m 內綠地", pnum(g.count_500m, " 處")) + prow("500m 內面積", pnum(g.area_500m_ha, " 公頃")) +
+      prow("3-30-300 可及性", g.has_300m_access === undefined ? "—" : (g.has_300m_access ? "達標" : "不足")) +
+      "</table>";
+
+    html += "<h2>熱環境 · 健康研判</h2><table>" +
+      prow("綠覆率(OSM下限)", pnum(h.green_coverage_pct, " %")) +
+      prow("對 30% 目標", h.meets_30pct_target === undefined ? "—" : (h.meets_30pct_target ? "達標" : "不足")) +
+      prow("高溫脆弱度", h.vulnerability_level || "—") +
+      "</table>";
+
+    html += "<h2>AI 綜合解讀</h2><div class='pr-ai'>" + aiHtml + "</div>";
+
+    html += "<h2>資料來源與免責</h2><p class='pr-src'>" +
+      "底圖:NLSC;界線:NLSC / taiwan-atlas;人口:內政部戶政司 ODRP014(11412);" +
+      "綠地:© OpenStreetMap 貢獻者(ODbL)/ Overpass;地名:OSM Nominatim;AI:Anthropic Claude。<br>" +
+      "免責:綠地與綠覆率為即時查詢之下限估計;熱環境/健康為研判而非實測。本報告僅供規劃參考,不構成正式法定文件。</p>";
+
+    html += "</div>";
+    printArea.innerHTML = html;
+    return true;
+  }
+
+  exportBtn.addEventListener("click", function () {
+    if (!buildPrintArea()) {
+      aiSource.textContent = "請先放標記/畫基地並按「分析周邊綠地」,有數據後再匯出報告。";
+      return;
+    }
+    window.print();
   });
 
   // 在地圖右下角標示資料來源(Leaflet attribution 已含 NLSC)

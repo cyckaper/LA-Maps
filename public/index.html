@@ -10,7 +10,7 @@
   <!-- Leaflet.draw -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 
-  <link rel="stylesheet" href="./css/style.css?v=3e" />
+  <link rel="stylesheet" href="./css/style.css?v=4a" />
 </head>
 <body>
   <div id="app">
@@ -106,16 +106,37 @@
         <button id="ai-btn" class="tool-btn" type="button">產生 AI 基地分析報告</button>
         <div id="ai-output" class="ai-output"></div>
         <p class="hint" id="ai-source"></p>
+        <button id="export-btn" class="tool-btn" type="button">匯出 / 列印報告(可存 PDF)</button>
+      </section>
+
+      <!-- 資料來源與版權 -->
+      <section class="panel credits">
+        <h2>資料來源與版權</h2>
+        <ul class="credits-list">
+          <li>底圖圖磚:內政部國土測繪中心 (NLSC)</li>
+          <li>行政界線:NLSC / taiwan-atlas(村里、鄉鎮市區)</li>
+          <li>人口統計:內政部戶政司 ODRP014(11412 期)</li>
+          <li>綠地圖徵:© OpenStreetMap 貢獻者(ODbL),經 Overpass API 即時查詢</li>
+          <li>地名搜尋:OpenStreetMap Nominatim</li>
+          <li>AI 解讀:Anthropic Claude</li>
+        </ul>
+        <p class="disclaimer">
+          免責聲明:綠地與綠覆率為 OpenStreetMap 即時查詢,屬下限估計,可能不完整;
+          熱環境/健康為依代理指標之研判,非實測氣溫或健康數據。
+          本工具分析僅供規劃參考,不構成正式法定文件或專業意見。
+        </p>
       </section>
 
       <footer class="foot">
-        <p>圖磚來源:內政部國土測繪中心 (NLSC)</p>
-        <p>地名搜尋:OpenStreetMap Nominatim</p>
+        <p>© 2026 基地分析工作站 · Site Analysis Studio · 僅供參考</p>
       </footer>
     </aside>
 
     <main id="map"></main>
   </div>
+
+  <!-- 列印 / 匯出 PDF 用的報告容器(螢幕隱藏,列印時顯示) -->
+  <div id="print-area" aria-hidden="true"></div>
 
   <!-- Leaflet -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -126,6 +147,6 @@
   <!-- Marked (Markdown 渲染 AI 報告) -->
   <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
 
-  <script src="./js/app.js?v=3e"></script>
+  <script src="./js/app.js?v=4a"></script>
 </body>
 </html>

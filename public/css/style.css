@@ -208,6 +208,36 @@ html, body {
   font-size: 12px;
 }
 
+/* AI 報告 Markdown 樣式 */
+.ai-output h1 { font-size: 16px; margin: 2px 0 8px; }
+.ai-output h2 {
+  font-size: 14px;
+  margin: 14px 0 6px;
+  color: var(--accent-hover);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 3px;
+}
+.ai-output h3 { font-size: 13px; margin: 10px 0 4px; }
+.ai-output ul,
+.ai-output ol { margin: 4px 0 8px; padding-left: 18px; }
+.ai-output li { margin: 2px 0; }
+.ai-output strong { color: var(--text); }
+.ai-output hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+.ai-output table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 10px;
+  font-size: 12px;
+}
+.ai-output th,
+.ai-output td {
+  border: 1px solid var(--border);
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+.ai-output th { background: var(--panel-2); }
+
 /* ---------- 人口指標 ---------- */
 .info-region {
   margin: 0 0 10px;

@@ -706,8 +706,15 @@
   var aiOutput = document.getElementById("ai-output");
   var aiSource = document.getElementById("ai-source");
 
-  // 將純文字報告轉為簡單 HTML(段落 + 換行)
+  // 將報告(Markdown)轉為 HTML;有 marked 就用,否則退回純文字段落
   function renderReport(text) {
+    if (window.marked && typeof window.marked.parse === "function") {
+      try {
+        return window.marked.parse(text);
+      } catch (e) {
+        /* 退回純文字 */
+      }
+    }
     var esc = text
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     return esc

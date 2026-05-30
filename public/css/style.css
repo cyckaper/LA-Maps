@@ -187,9 +187,25 @@ html, body {
   color: var(--text-dim);
 }
 
-#green-btn {
+#green-btn,
+#ai-btn {
   width: 100%;
   margin-bottom: 10px;
+}
+
+.ai-output {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text);
+}
+.ai-output p { margin: 0 0 8px; }
+.ai-output .ai-loading { color: var(--accent-hover); }
+.ai-output .ai-err { color: var(--text-dim); font-size: 12px; }
+.ai-output code {
+  background: var(--panel-2);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
 }
 
 /* ---------- 人口指標 ---------- */

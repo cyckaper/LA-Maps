@@ -53,6 +53,9 @@
   var lastFocus = null;
   // 最近一次對應到的行政區指標(供熱環境/健康研判使用)
   var lastRegionProps = null;
+  // 最近一次基地面積(公頃)與彙整分析資料(供 AI 解讀使用)
+  var lastSiteAreaHa = null;
+  var lastAnalysis = null;
 
   // =========================================================
   //  底圖切換
@@ -213,8 +216,10 @@
     if (count === 0) {
       areaValueEl.textContent = "—";
       areaDetailEl.textContent = "";
+      lastSiteAreaHa = null;
       return;
     }
+    lastSiteAreaHa = +(totalSqm / 10000).toFixed(2);
     var ha = totalSqm / 10000;
     areaValueEl.textContent = ha.toLocaleString("zh-Hant", {
       minimumFractionDigits: 2,
@@ -254,19 +259,24 @@
     searchStatus.className = "status" + (kind ? " " + kind : "");
   }
 
-  function fetchWithTimeout(url, ms) {
+  function fetchWithTimeout(url, ms, opts) {
+    opts = opts || {};
+    var init = {
+      method: opts.method || "GET",
+      headers: opts.headers || { Accept: "application/json" }
+    };
+    if (opts.body != null) init.body = opts.body;
     if (typeof AbortController === "undefined") {
-      return fetch(url); // 舊瀏覽器退回,無逾時控制
+      return fetch(url, init); // 舊瀏覽器退回,無逾時控制
     }
     var ctrl = new AbortController();
     var t = setTimeout(function () {
       ctrl.abort();
     }, ms);
-    return fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } }).finally(
-      function () {
-        clearTimeout(t);
-      }
-    );
+    init.signal = ctrl.signal;
+    return fetch(url, init).finally(function () {
+      clearTimeout(t);
+    });
   }
 
   searchForm.addEventListener("submit", function (e) {
@@ -530,6 +540,16 @@
       "研判方法:綠覆率(OSM 綠地/服務圈面積,屬下限估計)對照 3-30-300 的 30% 樹冠目標," +
       "結合高齡與幼年(高溫敏感族群)比例綜合研判。<br>" +
       "※ 此為依代理指標與實證關聯之<b>研判</b>,非實測健康/氣溫數據。";
+
+    if (lastAnalysis) {
+      lastAnalysis.heat = {
+        green_coverage_pct: +greenCoveragePct.toFixed(1),
+        meets_30pct_target: greenCoveragePct >= 30,
+        elderly_share: elderly,
+        child_share: child,
+        vulnerability_level: level
+      };
+    }
   }
 
   // way 的 geometry(來自 out geom)轉成 turf polygon
@@ -601,6 +621,12 @@
         if (parks.length === 0) {
           greenRegionEl.textContent = "周邊 " + GREEN_RADIUS + "m 內查無 OSM 綠地圖徵(或該區 OSM 標記不全)。";
           greenSourceEl.textContent = "資料:OpenStreetMap(可能不完整)";
+          lastAnalysis = {
+            focus: { lat: +lat.toFixed(5), lng: +lng.toFixed(5) },
+            site_area_ha: lastSiteAreaHa,
+            population: lastRegionProps,
+            green: { radius_m: GREEN_RADIUS, parks_found: 0 }
+          };
           renderHeat(0, lastRegionProps);
           return;
         }
@@ -612,9 +638,8 @@
         var area300 = sum(within300);
         var area500 = sum(parks);
         var has300 = within300.length > 0;
-        // 3b 熱環境/健康研判:綠覆率 = 綠地面積 / 服務圈面積
-        renderHeat((area500 / (Math.PI * GREEN_RADIUS * GREEN_RADIUS)) * 100, lastRegionProps);
         var nearestHa = nearest.properties.area_m2 / 10000;
+        var coverage = (area500 / (Math.PI * GREEN_RADIUS * GREEN_RADIUS)) * 100;
 
         // 在地圖上畫出綠地
         parks.forEach(function (p) {
@@ -642,6 +667,24 @@
         html += "<div class='ind' style='grid-column:1/-1'><dt>法規對照(最近綠地)</dt><dd style='font-size:12px;font-weight:400'>" + scale + "</dd></div>";
         greenIndEl.innerHTML = html;
 
+        // 彙整供 AI 解讀的真實數值,並產出熱環境研判
+        lastAnalysis = {
+          focus: { lat: +lat.toFixed(5), lng: +lng.toFixed(5) },
+          site_area_ha: lastSiteAreaHa,
+          population: lastRegionProps,
+          green: {
+            radius_m: GREEN_RADIUS,
+            nearest_dist_m: Math.round(nearest.properties.dist),
+            nearest_area_ha: +nearestHa.toFixed(2),
+            count_300m: within300.length,
+            area_300m_ha: +(area300 / 10000).toFixed(2),
+            count_500m: parks.length,
+            area_500m_ha: +(area500 / 10000).toFixed(2),
+            has_300m_access: has300
+          }
+        };
+        renderHeat(coverage, lastRegionProps);
+
         greenSourceEl.innerHTML =
           "資料:OpenStreetMap(即時查詢,可能不完整)<br>" +
           "準則:3-30-300(住家 300m 內應有綠地)、都市計畫定期通盤檢討辦法(兒童遊樂場≥0.1ha、閭鄰公園≥0.5ha、社區公園≥4ha);都市計畫法§45 公園綠地廣場兒童遊樂場合計≥計畫面積10%。";
@@ -655,6 +698,61 @@
   }
 
   greenBtn.addEventListener("click", analyzeGreen);
+
+  // =========================================================
+  //  第三階段 3c:AI 解讀(呼叫 /api/analyze,需 Cloudflare Pages 部署)
+  // =========================================================
+  var aiBtn = document.getElementById("ai-btn");
+  var aiOutput = document.getElementById("ai-output");
+  var aiSource = document.getElementById("ai-source");
+
+  // 將純文字報告轉為簡單 HTML(段落 + 換行)
+  function renderReport(text) {
+    var esc = text
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return esc
+      .split(/\n{2,}/)
+      .map(function (p) { return "<p>" + p.replace(/\n/g, "<br>") + "</p>"; })
+      .join("");
+  }
+
+  aiBtn.addEventListener("click", function () {
+    if (!lastAnalysis) {
+      aiOutput.innerHTML = "";
+      aiSource.textContent = "請先放標記/畫基地並按「分析周邊綠地」,產生數據後再生成報告。";
+      return;
+    }
+    aiBtn.disabled = true;
+    aiOutput.innerHTML = "<p class='ai-loading'>AI 解讀中…(約 10-20 秒)</p>";
+    aiSource.textContent = "";
+
+    fetchWithTimeout("./api/analyze", 45000, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(lastAnalysis)
+    })
+      .then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; });
+      })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error((res.j && res.j.error) || ("HTTP " + res.status));
+        }
+        aiOutput.innerHTML = renderReport(res.j.report || "(無內容)");
+        aiSource.textContent = "由 Claude 依本基地真實數值生成 · 模型 " + (res.j.model || "");
+      })
+      .catch(function (err) {
+        var msg = String(err && err.message ? err.message : err);
+        // GitHub Pages 上沒有後端函式,/api/analyze 會 404 → 友善提示
+        aiOutput.innerHTML =
+          "<p class='ai-err'>AI 解讀目前無法使用。</p>" +
+          "<p class='ai-err'>此功能需部署於 <b>Cloudflare Pages</b> 並設定 <code>ANTHROPIC_API_KEY</code> 後才會運作" +
+          "(GitHub Pages 為純靜態,無後端)。</p>" +
+          "<p class='ai-err' style='opacity:.7'>訊息:" + msg + "</p>";
+        aiSource.textContent = "";
+      })
+      .finally(function () { aiBtn.disabled = false; });
+  });
 
   // 在地圖右下角標示資料來源(Leaflet attribution 已含 NLSC)
   map.attributionControl.setPrefix(

@@ -735,6 +735,15 @@
   }
 
   aiBtn.addEventListener("click", function () {
+    // GitHub Pages 為純靜態、無後端,直接導向含後端的 Cloudflare 版本
+    if (/github\.io$/i.test(location.hostname)) {
+      aiOutput.innerHTML =
+        "<p class='ai-err'>此頁為 GitHub Pages 靜態預覽,沒有後端,無法執行 AI 解讀。</p>" +
+        "<p class='ai-err'>請改用含後端的版本:" +
+        "<a href='https://la-maps.pages.dev' target='_blank' rel='noopener'>la-maps.pages.dev</a></p>";
+      aiSource.textContent = "(其他分析功能在本頁皆可正常使用)";
+      return;
+    }
     if (!lastAnalysis) {
       aiOutput.innerHTML = "";
       aiSource.textContent = "請先放標記/畫基地並按「分析周邊綠地」,產生數據後再生成報告。";

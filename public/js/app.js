@@ -674,6 +674,107 @@
       (unit ? " <span class='u'>" + unit + "</span>" : "") + "</dd></div>";
   }
 
+  // 基地範圍內綠地分析:查基地外接框內綠地,取與基地相交面積
+  function analyzeGreenSite(sitePoly) {
+    var bb = turf.bbox(sitePoly); // [minX,minY,maxX,maxY] = [W,S,E,N]
+    var siteAreaM2 = turf.area(sitePoly);
+    greenRegionEl.textContent = "查詢基地範圍內 OSM 綠地中…";
+    greenIndEl.innerHTML = "";
+    greenSourceEl.textContent = "";
+
+    var le = '["leisure"~"^(park|garden|recreation_ground|nature_reserve|playground)$"]';
+    var lu = '["landuse"~"^(grass|forest|meadow|greenfield|village_green)$"]';
+    var bbox = "(" + bb[1] + "," + bb[0] + "," + bb[3] + "," + bb[2] + ")";
+    var q = "[out:json][timeout:25];(" +
+      "way" + le + bbox + ";" + "way" + lu + bbox + ";" + ");out geom;";
+    var url = OVERPASS + "?data=" + encodeURIComponent(q);
+
+    fetchWithTimeout(url, 25000)
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (data) {
+        var parks = [], incid = [], parkM2 = 0, incidM2 = 0, greenM2 = 0;
+        (data.elements || []).forEach(function (el) {
+          if (el.type !== "way") return;
+          var poly = wayToPolygon(el);
+          if (!poly) return;
+          var clip = null;
+          try { clip = turf.intersect(poly, sitePoly); } catch (e) { clip = null; }
+          if (!clip) return; // 不在基地內
+          var a = 0;
+          try { a = turf.area(clip); } catch (e) { a = 0; }
+          if (a <= 0) return;
+          poly.properties.clip_area_m2 = a;
+          greenM2 += a;
+          if (poly.properties.category === "park" && poly.properties.area_m2 >= MIN_PARK_M2) {
+            parks.push(poly); parkM2 += a;
+          } else {
+            incid.push(poly); incidM2 += a;
+          }
+        });
+
+        greenMarkers.clearLayers();
+        L.geoJSON(sitePoly, { style: { color: "#3ba88f", weight: 2, fill: false, dashArray: "4" } }).addTo(greenMarkers);
+        parks.concat(incid).forEach(function (f) {
+          var isPark = f.properties.category === "park" && f.properties.area_m2 >= MIN_PARK_M2;
+          L.geoJSON(f, {
+            style: isPark
+              ? { color: "#1f6b46", weight: 1.5, fillColor: "#2e8b57", fillOpacity: 0.45 }
+              : { color: "#7fae8e", weight: 0.5, fillColor: "#9cc8aa", fillOpacity: 0.25 }
+          }).bindPopup(
+            (isPark ? "🏞 公園:" : "綠地:") + (f.properties.name || "") + "<br>基地內 " +
+            (f.properties.clip_area_m2 / 10000).toFixed(2) + " 公頃").addTo(greenMarkers);
+        });
+
+        var siteHa = siteAreaM2 / 10000;
+        var coverage = siteAreaM2 > 0 ? (greenM2 / siteAreaM2) * 100 : 0;
+        var meets10 = coverage >= 10;
+
+        greenRegionEl.innerHTML = "基地範圍內綠地分析(面積 <b>" + siteHa.toFixed(2) + "</b> 公頃)";
+        var ghdr = function (t) { return "<div class='ghdr' style='grid-column:1/-1'>" + t + "</div>"; };
+        var html = "";
+        html += ghdr("基地內公園(≥0.1ha)");
+        html += ind("處數", parks.length, "處");
+        html += ind("面積", (parkM2 / 10000).toFixed(2), "公頃");
+        html += ghdr("基地內零星綠地");
+        html += ind("處數", incid.length, "處");
+        html += ind("面積", (incidM2 / 10000).toFixed(2), "公頃");
+        html += ghdr("整體");
+        html += ind("基地內綠地總面積", (greenM2 / 10000).toFixed(2), "公頃");
+        html += ind("基地綠覆率", coverage.toFixed(1), "%");
+        html += "<div class='ind' style='grid-column:1/-1'><dt>都市計畫法§45 對照</dt><dd style='font-size:12px;font-weight:400'>" +
+          "基地綠覆率 " + coverage.toFixed(1) + "% " + (meets10 ? "✓ 達 10% 參考門檻" : "✗ 未達 10%(註:§45 針對計畫區整體)") +
+          "</dd></div>";
+        greenIndEl.innerHTML = html;
+
+        lastAnalysis = {
+          focus: { lat: +((bb[1] + bb[3]) / 2).toFixed(5), lng: +((bb[0] + bb[2]) / 2).toFixed(5) },
+          site_area_ha: +siteHa.toFixed(2),
+          population: lastRegionProps,
+          green: {
+            mode: "within_site",
+            site_area_ha: +siteHa.toFixed(2),
+            park_count_in_site: parks.length,
+            park_area_in_site_ha: +(parkM2 / 10000).toFixed(2),
+            incidental_count_in_site: incid.length,
+            green_area_in_site_ha: +(greenM2 / 10000).toFixed(2),
+            site_green_coverage_pct: +coverage.toFixed(1),
+            meets_10pct_ref: meets10
+          }
+        };
+        renderHeat(coverage, lastRegionProps);
+
+        greenSourceEl.innerHTML =
+          "資料:OpenStreetMap(即時查詢,可能不完整)。綠地面積取與基地範圍相交部分。<br>" +
+          "對照:都市計畫法§45(公園綠地廣場兒童遊樂場合計≥計畫面積10%);綠覆率屬 OSM 下限估計。";
+      })
+      .catch(function (err) {
+        var aborted = err && err.name === "AbortError";
+        greenRegionEl.textContent =
+          (aborted ? "OSM 查詢逾時" : "OSM 綠地服務暫時無法連線") + ",請稍後再試。";
+        greenSourceEl.textContent = "";
+      });
+  }
+
   function analyzeGreen() {
     if (lastSitePolygon) { analyzeGreenSite(lastSitePolygon); return; }
     var focus = lastFocus || map.getCenter();

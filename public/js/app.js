@@ -51,6 +51,8 @@
 
   // 最近一次分析焦點(放標記或畫基地時更新),供綠地分析使用
   var lastFocus = null;
+  // 最近一次對應到的行政區指標(供熱環境/健康研判使用)
+  var lastRegionProps = null;
 
   // =========================================================
   //  底圖切換
@@ -354,6 +356,7 @@
   }
 
   function renderIndicators(props, titleHtml) {
+    lastRegionProps = props;
     infoRegionEl.innerHTML = titleHtml;
     var html = "";
     for (var i = 0; i < INDICATOR_DEFS.length; i++) {
@@ -485,6 +488,9 @@
   var greenRegionEl = document.getElementById("green-region");
   var greenIndEl = document.getElementById("green-indicators");
   var greenSourceEl = document.getElementById("green-source");
+  var heatRegionEl = document.getElementById("heat-region");
+  var heatIndEl = document.getElementById("heat-indicators");
+  var heatSourceEl = document.getElementById("heat-source");
 
   var OVERPASS = "https://overpass-api.de/api/interpreter";
   var GREEN_RADIUS = 500; // 公尺:服務圈半徑
@@ -495,6 +501,35 @@
     greenIndEl.innerHTML = "";
     greenSourceEl.textContent = "";
     greenMarkers.clearLayers();
+    heatRegionEl.textContent = "按上方「分析周邊綠地」後,這裡顯示熱環境與脆弱族群研判。";
+    heatIndEl.innerHTML = "";
+    heatSourceEl.textContent = "";
+  }
+
+  // 熱環境/健康研判:綠覆率(對 3-30-300 的 30% 目標)× 脆弱族群(高齡+幼年)
+  function renderHeat(greenCoveragePct, props) {
+    var elderly = props && props.elderly_share != null ? props.elderly_share : null;
+    var child = props && props.child_share != null ? props.child_share : null;
+    var greenDeficit = Math.max(0, Math.min(1, (30 - greenCoveragePct) / 30)); // 0..1
+    var vulnShare = elderly != null && child != null ? (elderly + child) / 100 : null;
+    var vulnNorm = vulnShare != null ? Math.min(1, vulnShare / 0.4) : null; // 40% 視為高
+    var heat = vulnNorm != null ? 0.5 * greenDeficit + 0.5 * vulnNorm : greenDeficit;
+    var level = heat > 0.66 ? "高" : heat > 0.34 ? "中" : "低";
+    var color = heat > 0.66 ? "#d56456" : heat > 0.34 ? "#d8a657" : "#45c2a4";
+
+    heatRegionEl.innerHTML =
+      "高溫脆弱度研判:<b style='color:" + color + "'>" + level + "</b>";
+    var html = "";
+    html += ind("綠覆率(OSM下限)", greenCoveragePct.toFixed(1), "%");
+    html += ind("對 30% 目標", (greenCoveragePct >= 30 ? "✓ 達標" : "✗ 不足"), "");
+    html += ind("高齡比例(65+)", elderly != null ? elderly.toFixed(1) : "—", "%");
+    html += ind("幼年比例(0-14)", child != null ? child.toFixed(1) : "—", "%");
+    heatIndEl.innerHTML = html;
+
+    heatSourceEl.innerHTML =
+      "研判方法:綠覆率(OSM 綠地/服務圈面積,屬下限估計)對照 3-30-300 的 30% 樹冠目標," +
+      "結合高齡與幼年(高溫敏感族群)比例綜合研判。<br>" +
+      "※ 此為依代理指標與實證關聯之<b>研判</b>,非實測健康/氣溫數據。";
   }
 
   // way 的 geometry(來自 out geom)轉成 turf polygon
@@ -566,6 +601,7 @@
         if (parks.length === 0) {
           greenRegionEl.textContent = "周邊 " + GREEN_RADIUS + "m 內查無 OSM 綠地圖徵(或該區 OSM 標記不全)。";
           greenSourceEl.textContent = "資料:OpenStreetMap(可能不完整)";
+          renderHeat(0, lastRegionProps);
           return;
         }
 
@@ -576,6 +612,8 @@
         var area300 = sum(within300);
         var area500 = sum(parks);
         var has300 = within300.length > 0;
+        // 3b 熱環境/健康研判:綠覆率 = 綠地面積 / 服務圈面積
+        renderHeat((area500 / (Math.PI * GREEN_RADIUS * GREEN_RADIUS)) * 100, lastRegionProps);
         var nearestHa = nearest.properties.area_m2 / 10000;
 
         // 在地圖上畫出綠地

@@ -637,25 +637,35 @@
     }
   }
 
-  // way 的 geometry(來自 out geom)轉成 turf polygon
-  function wayToPolygon(el) {
-    if (!el.geometry || el.geometry.length < 4) return null;
-    var ring = el.geometry.map(function (p) { return [p.lon, p.lat]; });
-    var first = ring[0], last = ring[ring.length - 1];
-    if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first);
-    if (ring.length < 4) return null;
-    try {
-      var poly = turf.polygon([ring]);
-      var tags = el.tags || {};
-      // leisure 類視為「公園/正式開放空間」;landuse 類視為「零星綠覆」
-      poly.properties = {
-        name: tags.name || tags["name:zh"] || (tags.leisure ? "(未命名公園)" : "(零星綠地)"),
-        category: tags.leisure ? "park" : "green"
-      };
-      return poly;
-    } catch (e) {
-      return null;
+  // 把 Overpass element(way 或 relation)轉成一個或多個帶屬性的 turf polygon
+  function elToPolygons(el) {
+    var tags = el.tags || {};
+    var category = tags.leisure ? "park" : "green";
+    var name = tags.name || tags["name:zh"] || (tags.leisure ? "(未命名公園)" : "(零星綠地)");
+    var out = [];
+
+    function pushRing(geom) {
+      if (!geom || geom.length < 4) return;
+      var ring = geom.map(function (p) { return [p.lon, p.lat]; });
+      var f = ring[0], l = ring[ring.length - 1];
+      if (f[0] !== l[0] || f[1] !== l[1]) ring.push(f);
+      if (ring.length < 4) return;
+      try {
+        var poly = turf.polygon([ring]);
+        poly.properties = { name: name, category: category, area_m2: turf.area(poly) };
+        out.push(poly);
+      } catch (e) { /* 跳過無效環 */ }
     }
+
+    if (el.type === "way") {
+      pushRing(el.geometry);
+    } else if (el.type === "relation" && el.members) {
+      // 多邊形 relation:取所有 outer 環各自成面(忽略 inner 洞,面積略為高估但足供估算)
+      el.members.forEach(function (m) {
+        if (m.type === "way" && m.geometry && (m.role === "outer" || !m.role)) pushRing(m.geometry);
+      });
+    }
+    return out;
   }
 
   function nearestDist(focusPt, park) {
@@ -685,8 +695,11 @@
     var le = '["leisure"~"^(park|garden|recreation_ground|nature_reserve|playground)$"]';
     var lu = '["landuse"~"^(grass|forest|meadow|greenfield|village_green)$"]';
     var bbox = "(" + bb[1] + "," + bb[0] + "," + bb[3] + "," + bb[2] + ")";
+    // 同時查 way 與 relation(多邊形公園常是 relation),relation 取外環幾何
     var q = "[out:json][timeout:25];(" +
-      "way" + le + bbox + ";" + "way" + lu + bbox + ";" + ");out geom;";
+      "way" + le + bbox + ";" + "relation" + le + bbox + ";" +
+      "way" + lu + bbox + ";" + "relation" + lu + bbox + ";" +
+      ");out geom;";
     var url = OVERPASS + "?data=" + encodeURIComponent(q);
 
     fetchWithTimeout(url, 25000)
@@ -694,22 +707,21 @@
       .then(function (data) {
         var parks = [], incid = [], parkM2 = 0, incidM2 = 0, greenM2 = 0;
         (data.elements || []).forEach(function (el) {
-          if (el.type !== "way") return;
-          var poly = wayToPolygon(el);
-          if (!poly) return;
-          var clip = null;
-          try { clip = turf.intersect(poly, sitePoly); } catch (e) { clip = null; }
-          if (!clip) return; // 不在基地內
-          var a = 0;
-          try { a = turf.area(clip); } catch (e) { a = 0; }
-          if (a <= 0) return;
-          poly.properties.clip_area_m2 = a;
-          greenM2 += a;
-          if (poly.properties.category === "park" && poly.properties.area_m2 >= MIN_PARK_M2) {
-            parks.push(poly); parkM2 += a;
-          } else {
-            incid.push(poly); incidM2 += a;
-          }
+          elToPolygons(el).forEach(function (poly) {
+            var clip = null;
+            try { clip = turf.intersect(poly, sitePoly); } catch (e) { clip = null; }
+            if (!clip) return; // 不在基地內
+            var a = 0;
+            try { a = turf.area(clip); } catch (e) { a = 0; }
+            if (a <= 0) return;
+            poly.properties.clip_area_m2 = a;
+            greenM2 += a;
+            if (poly.properties.category === "park" && poly.properties.area_m2 >= MIN_PARK_M2) {
+              parks.push(poly); parkM2 += a;
+            } else {
+              incid.push(poly); incidM2 += a;
+            }
+          });
         });
 
         greenMarkers.clearLayers();
@@ -787,8 +799,8 @@
     var lu = '["landuse"~"^(grass|forest|meadow|greenfield|village_green)$"]';
     var around = "(around:" + GREEN_RADIUS + "," + lat + "," + lng + ")";
     var q = "[out:json][timeout:25];(" +
-      "way" + le + around + ";" +
-      "way" + lu + around + ";" +
+      "way" + le + around + ";" + "relation" + le + around + ";" +
+      "way" + lu + around + ";" + "relation" + lu + around + ";" +
       ");out geom;";
     var url = OVERPASS + "?data=" + encodeURIComponent(q);
 
@@ -798,12 +810,10 @@
         var focusPt = turf.point([lng, lat]);
         var features = [];
         (data.elements || []).forEach(function (el) {
-          if (el.type !== "way") return;
-          var poly = wayToPolygon(el);
-          if (!poly) return;
-          poly.properties.area_m2 = turf.area(poly);
-          poly.properties.dist = nearestDist(focusPt, poly);
-          features.push(poly);
+          elToPolygons(el).forEach(function (poly) {
+            poly.properties.dist = nearestDist(focusPt, poly);
+            features.push(poly);
+          });
         });
 
         greenMarkers.clearLayers();

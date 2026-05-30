@@ -850,8 +850,8 @@
     if (/github\.io$/i.test(location.hostname)) {
       aiOutput.innerHTML =
         "<p class='ai-err'>此頁為 GitHub Pages 靜態預覽,沒有後端,無法執行 AI 解讀。</p>" +
-        "<p class='ai-err'>請改用含後端的版本:" +
-        "<a href='https://la-maps.pages.dev' target='_blank' rel='noopener'>la-maps.pages.dev</a></p>";
+        "<p class='ai-err'>請改用含後端的正式版本:" +
+        "<a href='https://map.healsdesign.org' target='_blank' rel='noopener'>map.healsdesign.org</a></p>";
       aiSource.textContent = "(其他分析功能在本頁皆可正常使用)";
       return;
     }

@@ -35,7 +35,7 @@
   // 底圖
   var baseLayers = {
     EMAP: nlscLayer("EMAP"),
-    EMAP5: nlscLayer("EMAP5"),
+    PHOTO_MIX: nlscLayer("PHOTO_MIX"), // 正射影像 + 道路/地名註記套疊
     PHOTO2: nlscLayer("PHOTO2")
   };
   var currentBase = "EMAP";

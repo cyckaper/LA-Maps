@@ -68,7 +68,8 @@
     { id: "SCHOOL", label: "各級學校範圍(學區)", type: "nlsc" },
     { id: "LANDSECT", label: "段籍圖(地籍)", type: "nlsc" },
     { id: "LIQUEFACTION", label: "土壤液化潛勢", type: "geo", layer: "WMS/Geomap_Envi_Soil_liquefatcion_2021" },
-    { id: "FAULT", label: "活動斷層分布(2021)", type: "geo", layer: "WMS/25K_Geomap_fault_2021" }
+    { id: "FAULT", label: "活動斷層分布線(2021)", type: "geo", layer: "WMS/25K_Geomap_fault_2021" },
+    { id: "FAULT_ZONE", label: "活動斷層地質敏感區(帶狀)", type: "geo", layer: "WMS/Sensitive_area_fault" }
   ];
   var overlayOpacity = 0.55;
   var overlays = {};

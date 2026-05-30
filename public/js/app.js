@@ -977,14 +977,18 @@
       body: JSON.stringify(lastAnalysis)
     })
       .then(function (r) {
-        return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; });
+        // 先讀純文字,避免後端回非 JSON(如 404 HTML)時 r.json() 拋出費解錯誤
+        return r.text().then(function (t) { return { ok: r.ok, status: r.status, text: t }; });
       })
       .then(function (res) {
-        if (!res.ok) {
-          throw new Error((res.j && res.j.error) || ("HTTP " + res.status));
+        var j = null;
+        try { j = JSON.parse(res.text); } catch (e) { j = null; }
+        if (!res.ok || !j) {
+          var snippet = (res.text || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+          throw new Error((j && j.error) || ("HTTP " + res.status + " · " + (snippet || "無回應內容")));
         }
-        aiOutput.innerHTML = renderReport(res.j.report || "(無內容)");
-        aiSource.textContent = "由 Claude 依本基地真實數值生成 · 模型 " + (res.j.model || "");
+        aiOutput.innerHTML = renderReport(j.report || "(無內容)");
+        aiSource.textContent = "由 Claude 依本基地真實數值生成 · 模型 " + (j.model || "");
       })
       .catch(function (err) {
         var msg = String(err && err.message ? err.message : err);

@@ -801,7 +801,10 @@
     var now = new Date();
     var aiHasReport = aiOutput.innerHTML.trim() &&
       !aiOutput.querySelector(".ai-err") && !aiOutput.querySelector(".ai-loading");
-    var aiHtml = aiHasReport ? aiOutput.innerHTML : "<p class='pr-muted'>(尚未產生 AI 報告)</p>";
+    // 去掉 AI 報告開頭重複的大標題(避免整份出現兩個「基地分析報告」)
+    var aiHtml = aiHasReport
+      ? aiOutput.innerHTML.replace(/<h1[^>]*>[\s\S]*?<\/h1>/i, "")
+      : "<p class='pr-muted'>(尚未產生 AI 報告)</p>";
 
     var html = "<div class='pr-doc'>";
     html += "<h1>基地分析報告</h1>";

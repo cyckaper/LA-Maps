@@ -57,7 +57,7 @@
       layers: layerName,
       format: "image/png",
       transparent: true,
-      version: "1.1.1",
+      version: "1.3.0",
       crs: L.CRS.EPSG4326,
       opacity: opacity,
       attribution: "地質圖 © 經濟部地質調查及礦業管理中心"

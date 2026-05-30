@@ -194,10 +194,21 @@ function pickSiteId(row) {
   return sid != null ? String(sid) : null;
 }
 
+// 候選期別:涵蓋「月別 yyymm」與「年度 yyy / yyy12」多種格式,
+// 因不同資料集發布頻率不同(單一年齡人口為年度資料)。
+function periodCandidates() {
+  const out = recentYyymm(8); // 近 8 個月別
+  for (let y = 114; y >= 110; y--) {
+    out.push(String(y));        // 年度三碼,如 113
+    out.push(String(y) + "12"); // 年底月別,如 11312
+  }
+  return out;
+}
+
 async function loadPopulation() {
   const acc = new Map();
   for (const ds of RIS_DATASETS) {
-    for (const ym of recentYyymm(4)) {
+    for (const ym of periodCandidates()) {
       const base = `${RIS_BASE}/${ds}/${ym}`;
       const first = await probe(base + "?page=1");
       DIAG.push({ ds, ym, ...diagOf(first) });

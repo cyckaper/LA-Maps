@@ -23,8 +23,11 @@ html, body {
 }
 
 #app {
+  position: fixed;
+  inset: 0;
   display: flex;
   height: 100vh;
+  height: 100dvh; /* iPad/手機 Safari 動態視窗高度,避免只佔半屏 */
   width: 100vw;
   overflow: hidden;
 }

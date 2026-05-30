@@ -32,6 +32,15 @@
     zoomControl: true
   });
 
+  // 視窗縮放/旋轉時讓地圖重算尺寸,避免圖磚只填半屏
+  function refreshMapSize() {
+    map.invalidateSize();
+  }
+  window.addEventListener("resize", refreshMapSize);
+  window.addEventListener("orientationchange", function () {
+    setTimeout(refreshMapSize, 250);
+  });
+
   // 底圖
   var baseLayers = {
     EMAP: nlscLayer("EMAP"),

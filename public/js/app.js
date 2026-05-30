@@ -1390,11 +1390,23 @@
     return html;
   }
 
+  // 報告檔名:標題 + 地區 + 時戳。瀏覽器列印存 PDF 時以文件 <title> 為預設檔名,
+  // 帶入地區與時間可避免每次都存成同名檔(使用者誤以為「沒更新、還是舊的」)。
+  function reportFileTitle() {
+    var d = new Date();
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    var stamp = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
+      "-" + pad(d.getHours()) + pad(d.getMinutes());
+    // 地區名去除檔名不合法字元
+    var region = (lastRegionTitle || "").replace(/[\\/:*?"<>|]/g, "").trim();
+    return t("r.title") + (region ? "_" + region : "") + "_" + stamp;
+  }
+
   function buildReportDoc() {
     var docLang = (window.i18nLang && window.i18nLang() === "en") ? "en" : "zh-Hant";
     return "<!doctype html><html lang='" + docLang + "'><head><meta charset='utf-8'>" +
       "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
-      "<title>" + t("r.title") + "</title><style>" + REPORT_CSS + "</style></head><body>" +
+      "<title>" + reportFileTitle() + "</title><style>" + REPORT_CSS + "</style></head><body>" +
       "<div class='bar noprint'><button onclick='window.print()'>🖨 " + t("ai.export") + "</button>" +
       "<span class='hint'>" + t("r.printHint") + "</span></div>" +
       "<div class='doc'>" + buildReportInner() + "</div></body></html>";

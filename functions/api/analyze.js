@@ -78,7 +78,6 @@ export async function onRequestPost({ request, env }) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 6000,
-        stream: true,
         system: [
           { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }
         ],
@@ -86,49 +85,20 @@ export async function onRequestPost({ request, env }) {
       })
     });
 
+    const out = await resp.json();
     if (!resp.ok) {
-      let msg = "AI 服務回應錯誤。";
-      try { const e = await resp.json(); msg = (e && e.error && e.error.message) || msg; } catch (e) {}
-      return json({ error: msg }, resp.status);
+      return json({ error: (out && out.error && out.error.message) || "AI 服務回應錯誤。" }, resp.status);
     }
 
-    // 將 Anthropic SSE 串流轉為純文字串流回傳前端(前端以 text/plain 逐塊渲染)
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    const encoder = new TextEncoder();
-    let buf = "";
-    const stream = new ReadableStream({
-      async pull(controller) {
-        const { done, value } = await reader.read();
-        if (done) { controller.close(); return; }
-        buf += decoder.decode(value, { stream: true });
-        // SSE 以 \n\n 分隔事件;逐筆解析 content_block_delta 的 text
-        let idx;
-        while ((idx = buf.indexOf("\n\n")) >= 0) {
-          const evt = buf.slice(0, idx);
-          buf = buf.slice(idx + 2);
-          evt.split("\n").forEach((line) => {
-            line = line.trim();
-            if (!line.startsWith("data:")) return;
-            const payload = line.slice(5).trim();
-            if (!payload || payload === "[DONE]") return;
-            try {
-              const j = JSON.parse(payload);
-              if (j.type === "content_block_delta" && j.delta && typeof j.delta.text === "string") {
-                controller.enqueue(encoder.encode(j.delta.text));
-              } else if (j.type === "message_delta" && j.delta && j.delta.stop_reason === "max_tokens") {
-                // 仍因長度被截斷:附上明顯提示,避免使用者誤以為報告已完整
-                controller.enqueue(encoder.encode(
-                  "\n\n---\n\n> ⚠️ 報告因長度上限被截斷,以上內容未完整。請縮小基地範圍或重新產生。"));
-              }
-            } catch (e) { /* 忽略無法解析的事件 */ }
-          });
-        }
-      },
-      cancel() { try { reader.cancel(); } catch (e) {} }
-    });
-
-    return new Response(stream, {
+    // 非串流:由 Cloudflare 在伺服器端一次完整收齊 Anthropic 回覆,再一次回傳前端。
+    // 改用非串流(取代先前 SSE)是因為長時間串流連線在行動裝置/Wi-Fi 上易中途斷線,
+    // 導致前端把不完整內容當成「已完成」而出現截斷。短連線一次傳完可避免此問題。
+    let text = (out.content || []).map((b) => b.text || "").join("").trim();
+    if (out.stop_reason === "max_tokens") {
+      text += "\n\n---\n\n> ⚠️ 報告因長度上限被截斷,以上內容未完整。請縮小基地範圍或重新產生。";
+    }
+    // 回傳 text/plain;前端以 r.body.getReader() 讀取仍完全相容(一次性 body 也能讀完)。
+    return new Response(text, {
       status: 200,
       headers: {
         "content-type": "text/plain; charset=utf-8",

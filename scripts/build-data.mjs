@@ -292,7 +292,8 @@ function indicators(rec, areaM2) {
     return {
       pop: null, households: null, male: null, female: null,
       sex_ratio: null, household_size: null, density: null,
-      aging_index: null, dep_ratio: null, child_dep: null, old_dep: null
+      aging_index: null, dep_ratio: null, child_dep: null, old_dep: null,
+      elderly_share: null, child_share: null
     };
   }
   const pop = rec.male + rec.female || rec.a0_14 + rec.a15_64 + rec.a65;
@@ -309,7 +310,9 @@ function indicators(rec, areaM2) {
     aging_index: r1(rec.a65, rec.a0_14),
     child_dep: r1(rec.a0_14, rec.a15_64),
     old_dep: r1(rec.a65, rec.a15_64),
-    dep_ratio: r1(rec.a0_14 + rec.a65, rec.a15_64)
+    dep_ratio: r1(rec.a0_14 + rec.a65, rec.a15_64),
+    elderly_share: pop > 0 ? +((rec.a65 / pop) * 100).toFixed(2) : null,
+    child_share: pop > 0 ? +((rec.a0_14 / pop) * 100).toFixed(2) : null
   };
 }
 

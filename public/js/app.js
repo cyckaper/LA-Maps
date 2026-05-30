@@ -781,9 +781,8 @@
       .finally(function () { aiBtn.disabled = false; });
   });
 
-  // ---- 報告匯出 / 列印(可存 PDF)----
+  // ---- 報告匯出 / 列印(另開乾淨獨立頁面,iPad 存 PDF 才穩定)----
   var exportBtn = document.getElementById("export-btn");
-  var printArea = document.getElementById("print-area");
 
   function pnum(v, suffix) {
     return v === null || v === undefined ? "—" : v + (suffix || "");
@@ -792,8 +791,23 @@
     return "<tr><th>" + label + "</th><td>" + val + "</td></tr>";
   }
 
-  function buildPrintArea() {
-    if (!lastAnalysis) return false;
+  var REPORT_CSS =
+    "body{font-family:'Noto Sans TC','Segoe UI',system-ui,-apple-system,sans-serif;color:#111;margin:0;padding:24px;line-height:1.6;}" +
+    ".doc{max-width:760px;margin:0 auto;}" +
+    "h1{font-size:22px;margin:0 0 6px;}" +
+    "h2{font-size:15px;margin:16px 0 6px;border-bottom:1px solid #888;padding-bottom:3px;}" +
+    ".meta{color:#444;font-size:13px;margin:0 0 10px;}" +
+    "table{width:100%;border-collapse:collapse;margin:6px 0 10px;}" +
+    "th,td{border:1px solid #bbb;padding:4px 8px;text-align:left;font-size:13px;vertical-align:top;}" +
+    "table.summary th{background:#f0f0f0;width:42%;font-weight:600;}" +
+    ".src{font-size:11px;color:#555;}" +
+    ".bar{max-width:760px;margin:0 auto 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}" +
+    ".bar button{font-size:15px;padding:9px 18px;border:0;border-radius:8px;background:#3ba88f;color:#fff;cursor:pointer;}" +
+    ".bar .hint{color:#777;font-size:12px;}" +
+    "tr{page-break-inside:avoid;}h1,h2{page-break-after:avoid;}" +
+    "@media print{.noprint{display:none!important;}body{padding:0;}}";
+
+  function buildReportInner() {
     var p = lastAnalysis.population || {};
     var g = lastAnalysis.green || {};
     var h = lastAnalysis.heat || {};
@@ -801,56 +815,68 @@
     var now = new Date();
     var aiHasReport = aiOutput.innerHTML.trim() &&
       !aiOutput.querySelector(".ai-err") && !aiOutput.querySelector(".ai-loading");
-    // 去掉 AI 報告開頭重複的大標題(避免整份出現兩個「基地分析報告」)
     var aiHtml = aiHasReport
       ? aiOutput.innerHTML.replace(/<h1[^>]*>[\s\S]*?<\/h1>/i, "")
-      : "<p class='pr-muted'>(尚未產生 AI 報告)</p>";
+      : "<p style='color:#888'>(尚未產生 AI 報告)</p>";
 
-    var html = "<div class='pr-doc'>";
-    html += "<h1>基地分析報告</h1>";
-    html += "<p class='pr-meta'>" + (lastRegionTitle || "") +
+    var html = "<h1>基地分析報告</h1>";
+    html += "<p class='meta'>" + (lastRegionTitle || "") +
       "<br>座標:" + pnum(focus.lat) + "°N, " + pnum(focus.lng) + "°E" +
       (lastSiteAreaHa != null ? " · 基地面積 " + lastSiteAreaHa + " 公頃" : "") +
       "<br>產製時間:" + now.toLocaleString("zh-TW") + "</p>";
 
-    html += "<h2>人口與指標</h2><table>" +
+    html += "<h2>人口與指標</h2><table class='summary'>" +
       prow("總人口", pnum(p.pop, " 人")) + prow("戶數", pnum(p.households, " 戶")) +
       prow("人口密度", pnum(p.density, " 人/km²")) + prow("性別比", pnum(p.sex_ratio)) +
       prow("老化指數", pnum(p.aging_index)) + prow("扶養比", pnum(p.dep_ratio, " %")) +
       prow("高齡比例(65+)", pnum(p.elderly_share, " %")) + prow("幼年比例(0-14)", pnum(p.child_share, " %")) +
       "</table>";
 
-    html += "<h2>開放空間 · 綠地(半徑 " + pnum(g.radius_m, " m") + ")</h2><table>" +
+    html += "<h2>開放空間 · 綠地(半徑 " + pnum(g.radius_m, " m") + ")</h2><table class='summary'>" +
       prow("最近綠地距離", pnum(g.nearest_dist_m, " m")) + prow("最近綠地面積", pnum(g.nearest_area_ha, " 公頃")) +
       prow("300m 內綠地", pnum(g.count_300m, " 處")) + prow("300m 內面積", pnum(g.area_300m_ha, " 公頃")) +
       prow("500m 內綠地", pnum(g.count_500m, " 處")) + prow("500m 內面積", pnum(g.area_500m_ha, " 公頃")) +
       prow("3-30-300 可及性", g.has_300m_access === undefined ? "—" : (g.has_300m_access ? "達標" : "不足")) +
       "</table>";
 
-    html += "<h2>熱環境 · 健康研判</h2><table>" +
+    html += "<h2>熱環境 · 健康研判</h2><table class='summary'>" +
       prow("綠覆率(OSM下限)", pnum(h.green_coverage_pct, " %")) +
       prow("對 30% 目標", h.meets_30pct_target === undefined ? "—" : (h.meets_30pct_target ? "達標" : "不足")) +
       prow("高溫脆弱度", h.vulnerability_level || "—") +
       "</table>";
 
-    html += "<h2>AI 綜合解讀</h2><div class='pr-ai'>" + aiHtml + "</div>";
+    html += "<h2>AI 綜合解讀</h2><div>" + aiHtml + "</div>";
 
-    html += "<h2>資料來源與免責</h2><p class='pr-src'>" +
+    html += "<h2>資料來源與免責</h2><p class='src'>" +
       "底圖:NLSC;界線:NLSC / taiwan-atlas;人口:內政部戶政司 ODRP014(11412);" +
       "綠地:© OpenStreetMap 貢獻者(ODbL)/ Overpass;地名:OSM Nominatim;AI:Anthropic Claude。<br>" +
       "免責:綠地與綠覆率為即時查詢之下限估計;熱環境/健康為研判而非實測。本報告僅供規劃參考,不構成正式法定文件。</p>";
+    return html;
+  }
 
-    html += "</div>";
-    printArea.innerHTML = html;
-    return true;
+  function buildReportDoc() {
+    return "<!doctype html><html lang='zh-Hant'><head><meta charset='utf-8'>" +
+      "<meta name='viewport' content='width=device-width,initial-scale=1'>" +
+      "<title>基地分析報告</title><style>" + REPORT_CSS + "</style></head><body>" +
+      "<div class='bar noprint'><button onclick='window.print()'>🖨 列印 / 存 PDF</button>" +
+      "<span class='hint'>在列印對話框可選「儲存成 PDF」</span></div>" +
+      "<div class='doc'>" + buildReportInner() + "</div></body></html>";
   }
 
   exportBtn.addEventListener("click", function () {
-    if (!buildPrintArea()) {
+    if (!lastAnalysis) {
       aiSource.textContent = "請先放標記/畫基地並按「分析周邊綠地」,有數據後再匯出報告。";
       return;
     }
-    window.print();
+    var w = window.open("", "_blank");
+    if (!w) {
+      aiSource.textContent = "瀏覽器阻擋了新分頁,請允許彈出視窗後再按一次「匯出」。";
+      return;
+    }
+    w.document.open();
+    w.document.write(buildReportDoc());
+    w.document.close();
+    aiSource.textContent = "已在新分頁開啟報告,於該頁按「列印 / 存 PDF」即可儲存。";
   });
 
   // 在地圖右下角標示資料來源(Leaflet attribution 已含 NLSC)

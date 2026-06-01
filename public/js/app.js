@@ -608,6 +608,9 @@
   var hgipRegionEl = document.getElementById("hgip-region");
   var hgipIndEl = document.getElementById("hgip-indicators");
   var hgipSourceEl = document.getElementById("hgip-source");
+  var aqiRegionEl = document.getElementById("aqi-region");
+  var aqiIndEl = document.getElementById("aqi-indicators");
+  var aqiSourceEl = document.getElementById("aqi-source");
 
   var OVERPASS = "https://overpass-api.de/api/interpreter";
   var GREEN_RADIUS = 500; // 公尺:服務圈半徑
@@ -638,6 +641,9 @@
     hgipRegionEl.textContent = t("hgip.hint");
     hgipIndEl.innerHTML = "";
     hgipSourceEl.textContent = "";
+    aqiRegionEl.textContent = t("aqi.hint");
+    aqiIndEl.innerHTML = "";
+    aqiSourceEl.textContent = "";
   }
 
   // 熱環境/健康研判:綠覆率(對 3-30-300 的 30% 目標)× 脆弱族群(高齡+幼年)
@@ -843,6 +849,88 @@
       };
       renderHGIP(); // 氣候(熱壓力)到位,重算介入需求
     }
+  }
+
+  // ---- 空氣品質 AQI(環境部,經 /api/aqi 後端代理)----
+  // 全站測站清單快取(每小時更新,前端 session 內只取一次)
+  var aqiStationsCache = null;
+
+  function aqiBand(aqi) {
+    // 依環境部 AQI 分級配色
+    if (aqi == null) return { key: "aqi.lvNA", color: "#888" };
+    if (aqi <= 50) return { key: "aqi.lvGood", color: "#45c2a4" };
+    if (aqi <= 100) return { key: "aqi.lvModerate", color: "#d8c95b" };
+    if (aqi <= 150) return { key: "aqi.lvUSG", color: "#e08a47" };
+    if (aqi <= 200) return { key: "aqi.lvUnhealthy", color: "#d56456" };
+    if (aqi <= 300) return { key: "aqi.lvVeryUnhealthy", color: "#9b59b6" };
+    return { key: "aqi.lvHazardous", color: "#7a3b2e" };
+  }
+
+  function loadAQI(lat, lng) {
+    aqiRegionEl.textContent = t("aqi.loading");
+    aqiIndEl.innerHTML = "";
+    aqiSourceEl.textContent = "";
+
+    var proceed = function (stations) {
+      if (!stations || !stations.length) { aqiRegionEl.textContent = t("aqi.nodata"); return; }
+      // 找最近測站
+      var best = null, bestD = Infinity;
+      stations.forEach(function (s) {
+        var d = haversineM(lat, lng, s.lat, s.lng);
+        if (d < bestD) { bestD = d; best = s; }
+      });
+      if (!best) { aqiRegionEl.textContent = t("aqi.nodata"); return; }
+
+      var band = aqiBand(best.aqi);
+      var level = t(band.key);
+      aqiRegionEl.innerHTML = t("aqi.title", {
+        s: best.site, d: (bestD / 1000).toFixed(1), c: band.color,
+        aqi: best.aqi == null ? "—" : best.aqi, lv: level
+      });
+      var html = "";
+      html += ind(t("aqi.aqi"), best.aqi == null ? "—" : best.aqi, "");
+      html += ind(t("aqi.status"), best.status || level, "");
+      html += ind(t("aqi.pm25"), best.pm25 == null ? "—" : best.pm25, "µg/m³");
+      html += ind(t("aqi.pm10"), best.pm10 == null ? "—" : best.pm10, "µg/m³");
+      html += ind(t("aqi.pollutant"), best.pollutant || "—", "");
+      aqiIndEl.innerHTML = html;
+      aqiSourceEl.innerHTML = t("aqi.note", { t: best.publishtime || "—" });
+
+      if (lastAnalysis) {
+        lastAnalysis.air_quality = {
+          nearest_site: best.site,
+          county: best.county,
+          distance_km: +(bestD / 1000).toFixed(1),
+          aqi: best.aqi,
+          status: best.status,
+          pm25: best.pm25,
+          pm10: best.pm10,
+          main_pollutant: best.pollutant,
+          publish_time: best.publishtime
+        };
+      }
+    };
+
+    if (aqiStationsCache) { proceed(aqiStationsCache); return; }
+    fetchWithTimeout("./api/aqi", 20000)
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (txt) {
+          var msg = txt; try { var j = JSON.parse(txt); if (j && j.error) msg = j.error; } catch (e) {}
+          throw new Error(msg);
+        });
+        return r.json();
+      })
+      .then(function (data) { aqiStationsCache = data.stations || []; proceed(aqiStationsCache); })
+      .catch(function () { aqiRegionEl.textContent = t("aqi.offline"); aqiSourceEl.textContent = ""; });
+  }
+
+  // 兩點間距離(公尺,Haversine)
+  function haversineM(aLat, aLng, bLat, bLng) {
+    var R = 6371000, rad = Math.PI / 180;
+    var dLat = (bLat - aLat) * rad, dLng = (bLng - aLng) * rad;
+    var s = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.asin(Math.sqrt(s));
   }
 
   // ---- 開放空間服務水準(OpenSpaceServiceLevel 模組)----
@@ -1235,6 +1323,7 @@
         renderHeat(coverage, lastRegionProps);
         loadClimate((bb[1] + bb[3]) / 2, (bb[0] + bb[2]) / 2);
         loadOSSL((bb[1] + bb[3]) / 2, (bb[0] + bb[2]) / 2);
+        loadAQI((bb[1] + bb[3]) / 2, (bb[0] + bb[2]) / 2);
 
         greenSourceEl.innerHTML = t("g.noteSite");
       })
@@ -1291,6 +1380,7 @@
           renderHeat(0, lastRegionProps);
           loadClimate(lat, lng);
           loadOSSL(lat, lng);
+          loadAQI(lat, lng);
           return;
         }
 
@@ -1385,6 +1475,7 @@
         renderHeat(coverage, lastRegionProps);
         loadClimate(lat, lng);
         loadOSSL(lat, lng);
+        loadAQI(lat, lng);
 
         greenSourceEl.innerHTML = t("g.noteRadius");
       })
@@ -1746,6 +1837,18 @@
         html += prow(hgFactorLabel[f.key] || f.key, Math.round(f.normalized * 100) + " %");
       });
       html += "</table>";
+    }
+
+    var aq = lastAnalysis.air_quality;
+    if (aq) {
+      html += "<h2>" + t("r.hAQI") + "</h2><table class='summary'>" +
+        prow(t("r.aqiSite"), (aq.nearest_site || "—") + (aq.distance_km != null ? "(" + aq.distance_km + " km)" : "")) +
+        prow(t("r.aqiVal"), pnum(aq.aqi) + (aq.status ? "(" + aq.status + ")" : "")) +
+        prow(t("r.aqiPm25"), pnum(aq.pm25, " µg/m³")) +
+        prow(t("r.aqiPm10"), pnum(aq.pm10, " µg/m³")) +
+        prow(t("r.aqiPollutant"), aq.main_pollutant || "—") +
+        prow(t("r.aqiTime"), aq.publish_time || "—") +
+        "</table>";
     }
 
     var os = lastAnalysis.openspace_service_level;

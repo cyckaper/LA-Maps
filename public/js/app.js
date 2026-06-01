@@ -230,6 +230,7 @@
     lastSitePolygon = null; // 點模式
     // 點 → 查村里人口指標
     lookupVillage(e.latlng.lat, e.latlng.lng);
+    if (cmState.allPoints.length) refreshCommentScope(); // 已載入意見:重新依新焦點篩選
   });
 
   // --- 多邊形繪製 ---
@@ -271,6 +272,7 @@
       lastFocus = L.latLng(xy[1], xy[0]);
       lastSitePolygon = e.layer.toGeoJSON(); // 面模式:分析範圍內綠地
       lookupTown(xy[1], xy[0]);
+      if (cmState.allPoints.length) refreshCommentScope(); // 已載入意見:依範圍篩選
     } catch (err) {
       /* 忽略 */
     }
@@ -331,6 +333,8 @@
     lastBiodiv = null;
     resetGreenPanel();
     resetBiodivPanel();
+    cmMarkers.clearLayers(); // 清意見圖層標示(保留已上傳資料,可重新選範圍篩選)
+    if (cmState.allPoints.length) cmRegionEl.textContent = t("cm.reselect");
     toolHint.textContent = t("t.cleared");
   });
 
@@ -884,6 +888,196 @@
   function global_OSSL() {
     return (typeof window !== "undefined" && window.OpenSpaceServiceLevel) || null;
   }
+
+  // =========================================================
+  //  使用者意見圖層(comments-layer 模組)
+  // =========================================================
+  var cmFileEl = document.getElementById("cm-file");
+  var cmUploadBtn = document.getElementById("cm-upload");
+  var cmRegionEl = document.getElementById("cm-region");
+  var cmMappingEl = document.getElementById("cm-mapping");
+  var cmIndEl = document.getElementById("cm-indicators");
+  var cmSummaryEl = document.getElementById("cm-summary");
+  var cmActionsEl = document.getElementById("cm-actions");
+  var cmAiBtn = document.getElementById("cm-ai");
+  var cmSourceEl = document.getElementById("cm-source");
+  var cmMarkers = L.layerGroup().addTo(map);
+  var CM_RADIUS = 800; // 點模式:意見篩選半徑(公尺)
+
+  var cmState = { allPoints: [], cols: null, columns: [], inScope: [], summary: null };
+
+  function CL() { return (typeof window !== "undefined" && window.CommentsLayer) || null; }
+
+  cmUploadBtn.addEventListener("click", function () { if (CL()) cmFileEl.click(); else cmRegionEl.textContent = t("cm.unavailable"); });
+
+  cmFileEl.addEventListener("change", function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    cmRegionEl.textContent = t("cm.parsing");
+    cmMappingEl.style.display = "none";
+    CL().parseFile(file)
+      .then(function (res) {
+        if (!res.rows.length) { cmRegionEl.textContent = t("cm.empty"); return; }
+        cmState.columns = res.columns;
+        cmState.rows = res.rows;
+        cmState.cols = CL().detectColumns(res.columns);
+        renderColumnMapping();
+        applyCommentMapping(); // 以偵測結果先跑一次
+      })
+      .catch(function () { cmRegionEl.textContent = t("cm.parseErr"); })
+      .finally(function () { cmFileEl.value = ""; });
+  });
+
+  // 欄位對應 UI(自動偵測 + 手動指定)
+  function renderColumnMapping() {
+    var opts = function (sel) {
+      return "<option value=''>—</option>" + cmState.columns.map(function (c) {
+        return "<option value='" + c.replace(/'/g, "&#39;") + "'" + (c === sel ? " selected" : "") + ">" + c + "</option>";
+      }).join("");
+    };
+    cmMappingEl.innerHTML =
+      "<div class='cm-map-row'><label>" + t("cm.colLat") + "</label><select id='cm-sel-lat'>" + opts(cmState.cols.lat) + "</select></div>" +
+      "<div class='cm-map-row'><label>" + t("cm.colLng") + "</label><select id='cm-sel-lng'>" + opts(cmState.cols.lng) + "</select></div>" +
+      "<div class='cm-map-row'><label>" + t("cm.colComment") + "</label><select id='cm-sel-comment'>" + opts(cmState.cols.comment) + "</select></div>";
+    cmMappingEl.style.display = "";
+    ["lat", "lng", "comment"].forEach(function (k) {
+      document.getElementById("cm-sel-" + k).addEventListener("change", function (ev) {
+        cmState.cols[k] = ev.target.value || null;
+        applyCommentMapping();
+      });
+    });
+  }
+
+  // 套用欄位對應 → 建點 → 依當前 focus/polygon 篩選 → 標示 + 摘要
+  function applyCommentMapping() {
+    if (!cmState.cols || !cmState.cols.lat || !cmState.cols.lng) {
+      cmRegionEl.textContent = t("cm.needLatLng"); return;
+    }
+    cmState.allPoints = CL().buildPoints(cmState.rows, cmState.cols);
+    refreshCommentScope();
+  }
+
+  // 依目前選定範圍(面)或焦點(點)篩選並呈現
+  function refreshCommentScope() {
+    if (!cmState.allPoints.length) { cmRegionEl.textContent = t("cm.noValid"); return; }
+    var scope;
+    var scopeDesc;
+    if (lastSitePolygon) {
+      scope = CL().filterByPolygon(cmState.allPoints, lastSitePolygon);
+      scopeDesc = t("cm.scopeSite");
+    } else if (lastFocus) {
+      scope = CL().filterByRadius(cmState.allPoints, lastFocus.lat, lastFocus.lng, CM_RADIUS);
+      scopeDesc = t("cm.scopeRadius", { r: CM_RADIUS });
+    } else {
+      // 尚未選地點:全部顯示但提示
+      scope = cmState.allPoints;
+      scopeDesc = t("cm.scopeAll");
+    }
+    cmState.inScope = scope;
+
+    // 標示點位
+    cmMarkers.clearLayers();
+    scope.forEach(function (p) {
+      L.circleMarker([p.lat, p.lng], {
+        radius: 5, color: "#7b4fb5", weight: 1.5, fillColor: "#a87fd6", fillOpacity: 0.7
+      }).bindPopup((p.comment ? p.comment : t("cm.noText")) +
+        "<br><span style='color:#888'>" + p.lat.toFixed(5) + ", " + p.lng.toFixed(5) + "</span>")
+        .addTo(cmMarkers);
+    });
+
+    cmRegionEl.innerHTML = t("cm.result", { n: scope.length, total: cmState.allPoints.length, scope: scopeDesc });
+
+    // 本地詞頻摘要
+    var sum = CL().summarize(scope, { topN: 12, sampleN: 5 });
+    cmState.summary = sum;
+    renderCommentSummary(sum);
+
+    cmActionsEl.style.display = scope.length ? "" : "none";
+    cmSourceEl.innerHTML = t("cm.note");
+
+    // 寫入 lastAnalysis 供 AI 報告引用
+    if (lastAnalysis) {
+      lastAnalysis.user_comments = {
+        in_scope_count: sum.total,
+        with_comment_count: sum.withComment,
+        top_words: sum.topWords.slice(0, 10).map(function (w) { return w.word + "(" + w.count + ")"; }),
+        sample_comments: sum.samples
+      };
+    }
+  }
+
+  function renderCommentSummary(sum) {
+    cmIndEl.innerHTML =
+      ind(t("cm.count"), sum.total, t("cm.unitPt")) +
+      ind(t("cm.withText"), sum.withComment, t("cm.unitPt"));
+    var html = "";
+    if (sum.topWords.length) {
+      var max = sum.topWords[0].count;
+      html += "<div class='ghdr' style='grid-column:1/-1'>" + t("cm.topWords") + "</div>";
+      html += "<div class='cm-words'>";
+      sum.topWords.forEach(function (w) {
+        var pct = Math.round(w.count / max * 100);
+        html += "<div class='cm-word'><span class='cm-word-t'>" + w.word + "</span>" +
+          "<span class='cm-word-bar' style='width:" + pct + "%'></span>" +
+          "<span class='cm-word-n'>" + w.count + "</span></div>";
+      });
+      html += "</div>";
+    }
+    if (sum.samples.length) {
+      html += "<div class='ghdr' style='grid-column:1/-1'>" + t("cm.samples") + "</div>";
+      html += "<ul class='cm-samples'>" + sum.samples.map(function (s) {
+        return "<li>" + s.replace(/</g, "&lt;") + "</li>";
+      }).join("") + "</ul>";
+    }
+    cmSummaryEl.innerHTML = html;
+  }
+
+  // AI 主題摘要:把範圍內意見送 /api/analyze(以 comments-only 模式)
+  cmAiBtn.addEventListener("click", function () {
+    if (!cmState.inScope.length) return;
+    if (/github\.io$/i.test(location.hostname)) {
+      cmSourceEl.innerHTML = "<span class='ai-err'>" + t("ai.ghPages") + "</span>";
+      return;
+    }
+    cmAiBtn.disabled = true;
+    cmSummaryEl.insertAdjacentHTML("beforeend", "<p class='ai-loading' id='cm-ai-loading'>" + t("cm.aiLoading") + "</p>");
+    var comments = cmState.inScope.map(function (p) { return p.comment; })
+      .filter(function (c) { return c && c.trim(); }).slice(0, 200); // 上限 200 則避免過長
+    var payload = {
+      mode: "comments_summary",
+      lang: (window.i18nLang ? window.i18nLang() : "zh"),
+      comments: comments,
+      region: lastRegionTitle || null
+    };
+    fetchWithTimeout("./api/analyze", 60000, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(function (r) {
+        var ct = r.headers.get("content-type") || "";
+        if (!r.ok || ct.indexOf("application/json") >= 0) {
+          return r.text().then(function (txt) {
+            var msg = txt; try { var j = JSON.parse(txt); if (j && j.error) msg = j.error; } catch (e) {}
+            throw new Error(msg);
+          });
+        }
+        return r.text();
+      })
+      .then(function (txt) {
+        var el = document.getElementById("cm-ai-loading"); if (el) el.remove();
+        var box = document.createElement("div");
+        box.className = "ai-output";
+        box.innerHTML = renderReport(txt || t("ai.empty"));
+        cmSummaryEl.appendChild(box);
+        if (lastAnalysis && lastAnalysis.user_comments) lastAnalysis.user_comments.ai_theme_summary = txt;
+      })
+      .catch(function (err) {
+        var el = document.getElementById("cm-ai-loading"); if (el) el.remove();
+        cmSourceEl.innerHTML = "<span class='ai-err'>" + t("ai.fail") + " " + String(err && err.message || err) + "</span>";
+      })
+      .finally(function () { cmAiBtn.disabled = false; });
+  });
 
   // 把 Overpass element(way 或 relation)轉成一個或多個帶屬性的 turf polygon
   function elToPolygons(el) {
@@ -1538,6 +1732,22 @@
         (b.taxa ? prow(t("r.taxa"),
           Object.keys(b.taxa).map(function (k) { return k + " " + b.taxa[k]; }).join("、")) : "") +
         "</table>";
+    }
+
+    var uc = lastAnalysis.user_comments;
+    if (uc) {
+      html += "<h2>" + t("r.hComments") + "</h2><table class='summary'>" +
+        prow(t("r.cmCount"), pnum(uc.in_scope_count, t("cm.unitPt"))) +
+        prow(t("r.cmWith"), pnum(uc.with_comment_count, t("cm.unitPt"))) +
+        (uc.top_words && uc.top_words.length ? prow(t("r.cmTop"), uc.top_words.join("、")) : "") +
+        "</table>";
+      if (uc.sample_comments && uc.sample_comments.length) {
+        html += "<p class='src'>" + t("r.cmSamples") + "</p><ul>" +
+          uc.sample_comments.map(function (s) { return "<li>" + s.replace(/</g, "&lt;") + "</li>"; }).join("") + "</ul>";
+      }
+      if (uc.ai_theme_summary) {
+        html += "<div>" + renderReport(uc.ai_theme_summary) + "</div>";
+      }
     }
 
     html += "<h2>" + t("r.hAI") + "</h2><div>" + aiHtml + "</div>";

@@ -1648,11 +1648,9 @@
   function renderUsageNote(u) {
     if (!u) return "";
     var nt = function (n) { return (n || 0).toLocaleString(); };
-    var usd = u.cost_usd != null ? u.cost_usd : 0;
-    var twd = (usd * 32).toFixed(2); // 概算匯率
     return t("usage.note", {
       in: nt(u.input_tokens), out: nt(u.output_tokens),
-      cr: nt(u.cache_read_input_tokens), usd: usd.toFixed(5), twd: twd
+      cr: nt(u.cache_read_input_tokens)
     });
   }
 

@@ -165,19 +165,11 @@ export default async (req) => {
       } catch (e) {
         controller.enqueue(encoder.encode("\n\n(串流中斷:" + (e.message || e) + ")"));
       }
-      // 估算成本(claude-sonnet-4-6 牌價,每百萬 token,USD)
-      // claude-haiku-4-5 牌價(每百萬 token,USD)
-      const PRICE = { in: 1, out: 5, cacheWrite: 1.25, cacheRead: 0.10 };
-      const cost =
-        (usage.input_tokens * PRICE.in + usage.output_tokens * PRICE.out +
-         usage.cache_creation_input_tokens * PRICE.cacheWrite +
-         usage.cache_read_input_tokens * PRICE.cacheRead) / 1e6;
       const meta = {
         model: MODEL, mode: reqMode, ts: new Date().toISOString(),
         input_tokens: usage.input_tokens, output_tokens: usage.output_tokens,
         cache_creation_input_tokens: usage.cache_creation_input_tokens,
-        cache_read_input_tokens: usage.cache_read_input_tokens,
-        cost_usd: +cost.toFixed(5)
+        cache_read_input_tokens: usage.cache_read_input_tokens
       };
       // 伺服器端記錄(Netlify Function logs 可查每一次)
       try { console.log("[analyze usage] " + JSON.stringify(meta)); } catch (e) {}

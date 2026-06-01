@@ -82,8 +82,8 @@ export default async (req) => {
           ? ("提醒:本摘要僅反映選定範圍內 " + totalInScope + " 則文字意見中、依檔案順序的前 " + comments.length + " 則(非抽樣),不代表所有訪客。")
           : ("提醒:本摘要僅反映選定範圍內所上傳的 " + comments.length + " 則文字意見,不代表所有訪客。"));
     systemPrompt = lang === "en"
-      ? ("You are an analyst summarizing community/user comments about a place. From the provided list of comments, identify the main recurring themes (3-6), each with a short label, how common it is, and 1-2 representative quotes. Note overall sentiment if discernible. Be concise, use Markdown headings/lists. Only use the provided comments; do not invent. Do NOT state any comment count yourself. End with EXACTLY this caveat line verbatim: " + caveat)
-      : ("你是分析地點使用者意見的助理。請從提供的意見清單中,歸納出主要、反覆出現的主題(3-6 個),每個主題給簡短標題、常見程度,以及 1-2 句代表性原句引用;若可判斷請點出整體情緒傾向。務求精煉,使用 Markdown 標題與條列。只能根據提供的意見,不可杜撰。請勿自行宣稱任何意見筆數。結尾請「原文照抄」以下這句免責提醒:" + caveat);
+      ? ("You are an analyst summarizing community/user comments about a place. From the provided list of comments, identify the main recurring themes (3-6), each with a short label, how common it is, and 1-2 representative quotes. Note overall sentiment if discernible. Be concise, use Markdown lists. Only use the provided comments; do not invent. Do NOT output a top-level title or H1/H2 heading (the page already shows a title); start directly with the themes. Do NOT state any comment count yourself. End with EXACTLY this caveat line verbatim: " + caveat)
+      : ("你是分析地點使用者意見的助理。請從提供的意見清單中,歸納出主要、反覆出現的主題(3-6 個),每個主題給簡短標題、常見程度,以及 1-2 句代表性原句引用;若可判斷請點出整體情緒傾向。務求精煉,使用 Markdown 條列。只能根據提供的意見,不可杜撰。請「不要」輸出整體大標題(頁面已有標題),直接從主題開始寫。請勿自行宣稱任何意見筆數。結尾請「原文照抄」以下這句免責提醒:" + caveat);
     const head = lang === "en"
       ? ("Comments" + (data.region ? " near " + data.region : "") + " (" + comments.length + " items):\n\n")
       : ("以下為" + (data.region ? data.region + "附近" : "選定範圍內") + "的使用者意見(共 " + comments.length + " 則):\n\n");
@@ -121,13 +121,16 @@ export default async (req) => {
     return json({ error: msg }, upstream.status || 502);
   }
 
-  // 解析 Anthropic SSE,逐塊把文字 delta 以純文字串流回前端
+  // 解析 Anthropic SSE,逐塊把文字 delta 以純文字串流回前端;同時擷取 token 用量
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
+  const reqMode = isComments ? "comments_summary" : "site_report";
   const stream = new ReadableStream({
     async start(controller) {
       const reader = upstream.body.getReader();
       let buf = "";
+      // 用量累計(message_start 帶 input/cache;message_delta 帶 output)
+      const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -144,6 +147,13 @@ export default async (req) => {
               const evt = JSON.parse(payload);
               if (evt.type === "content_block_delta" && evt.delta && evt.delta.text) {
                 controller.enqueue(encoder.encode(evt.delta.text));
+              } else if (evt.type === "message_start" && evt.message && evt.message.usage) {
+                const u = evt.message.usage;
+                usage.input_tokens = u.input_tokens || 0;
+                usage.cache_creation_input_tokens = u.cache_creation_input_tokens || 0;
+                usage.cache_read_input_tokens = u.cache_read_input_tokens || 0;
+              } else if (evt.type === "message_delta" && evt.usage) {
+                usage.output_tokens = evt.usage.output_tokens || usage.output_tokens;
               }
             } catch (e) { /* 忽略非 JSON 行 */ }
           }
@@ -151,6 +161,23 @@ export default async (req) => {
       } catch (e) {
         controller.enqueue(encoder.encode("\n\n(串流中斷:" + (e.message || e) + ")"));
       }
+      // 估算成本(claude-sonnet-4-6 牌價,每百萬 token,USD)
+      const PRICE = { in: 3, out: 15, cacheWrite: 3.75, cacheRead: 0.30 };
+      const cost =
+        (usage.input_tokens * PRICE.in + usage.output_tokens * PRICE.out +
+         usage.cache_creation_input_tokens * PRICE.cacheWrite +
+         usage.cache_read_input_tokens * PRICE.cacheRead) / 1e6;
+      const meta = {
+        model: MODEL, mode: reqMode, ts: new Date().toISOString(),
+        input_tokens: usage.input_tokens, output_tokens: usage.output_tokens,
+        cache_creation_input_tokens: usage.cache_creation_input_tokens,
+        cache_read_input_tokens: usage.cache_read_input_tokens,
+        cost_usd: +cost.toFixed(5)
+      };
+      // 伺服器端記錄(Netlify Function logs 可查每一次)
+      try { console.log("[analyze usage] " + JSON.stringify(meta)); } catch (e) {}
+      // 串流尾端附機器可讀標記;前端會擷取並移除後再渲染
+      controller.enqueue(encoder.encode("\n␞ USAGE ␞" + JSON.stringify(meta)));
       controller.close();
     }
   });

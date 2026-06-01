@@ -921,7 +921,12 @@
         return r.json();
       })
       .then(function (data) { aqiStationsCache = data.stations || []; proceed(aqiStationsCache); })
-      .catch(function () { aqiRegionEl.textContent = t("aqi.offline"); aqiSourceEl.textContent = ""; });
+      .catch(function (e) {
+        // 顯示實際錯誤以利診斷(環境變數未設、function 未部署、上游錯誤等)
+        var detail = e && e.message ? e.message : String(e);
+        aqiRegionEl.textContent = t("aqi.offline");
+        aqiSourceEl.textContent = detail;
+      });
   }
 
   // 兩點間距離(公尺,Haversine)

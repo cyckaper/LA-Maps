@@ -70,7 +70,7 @@
 │   └─ netlify/functions/analyze.mjs   後端 Function(/api/analyze)
 │        持環境變數 ANTHROPIC_API_KEY,代理呼叫 ↓
 │        ▼
-└─ Anthropic API (claude-sonnet-4-6) ───────── AI 報告 / 意見摘要
+└─ Anthropic API (claude-haiku-4-5) ──────────── AI 報告 / 意見摘要
 ```
 
 前端另直接呼叫多個**免金鑰公開 API**(不經後端):
@@ -103,7 +103,7 @@
 |---|---|---|---|
 | **GitHub**(公開 repo) | 免費 | — | github.com → Settings → Billing |
 | **Netlify**(託管 + Functions) | 免費額度內 | 免費方案:每月 100 GB 流量、Functions 12.5 萬次呼叫/125 萬次·秒執行;超量才付費 | Netlify → Team → **Usage** / **Billing** |
-| **Anthropic API**(Claude) | **是,按用量** | 依 **token** 計費(輸入 + 輸出),`claude-sonnet-4-6`:約 **US$3 / 百萬輸入 token**、**US$15 / 百萬輸出 token** | console.anthropic.com → **Usage** / **Billing**(可設用量上限與額度警示) |
+| **Anthropic API**(Claude) | **是,按用量** | 依 **token** 計費(輸入 + 輸出),`claude-haiku-4-5`:約 **US$1 / 百萬輸入 token**、**US$5 / 百萬輸出 token** | console.anthropic.com → **Usage** / **Billing**(可設用量上限與額度警示) |
 | NLSC / 地質所 / Overpass / Nominatim / Open-Meteo / iNaturalist | 免費 | 公開政府/開源服務,免金鑰 | — |
 | unpkg(SheetJS CDN) | 免費 | 公共 CDN | — |
 
@@ -111,7 +111,7 @@
 
 ### Anthropic 每次大約多少錢?
 
-以本工具的用法估算(`claude-sonnet-4-6`,2026/06 牌價;**實際以官方為準**):
+以本工具的用法估算(`claude-haiku-4-5`,2026/06 牌價;**實際以官方為準**):
 
 | 操作 | 輸入 token(約) | 輸出 token(約) | 每次約略成本 |
 |---|---|---|---|

@@ -3,7 +3,10 @@
  * 金鑰存於環境變數 ANTHROPIC_API_KEY(於 Netlify 後台設定,前端不外露)。
  */
 
-const MODEL = "claude-sonnet-4-6";
+// 用 Haiku 4.5:Netlify 免費方案 Function 有 10 秒「總執行時間」硬上限,
+// 七節報告以 Sonnet 串流常超時被砍斷(連尾端用量都送不出);Haiku 4.5 速度約
+// 2-3 倍且品質足夠此結構化任務,可在 10 秒內穩定完成。
+const MODEL = "claude-haiku-4-5-20251001";
 
 const SYSTEM_PROMPT = `你是台灣的都市規劃與基地分析助理。請依使用者提供的「真實數值(JSON)」撰寫一份基地分析報告。輸出語言:依使用者指示(繁體中文或 English),未指定時用繁體中文。
 
@@ -33,7 +36,7 @@ const SYSTEM_PROMPT = `你是台灣的都市規劃與基地分析助理。請依
 六、規劃建議(2-4 點,具體、可行,扣回前述數據與法規)
 七、資料與限制說明(資料來源、代理指標、不確定性)
 
-語氣:專業、客觀、精準。全文控制在約 500-700 字(英文版約 350-500 words),寧可精煉也不要冗長;務必完整寫到「資料與限制說明」一節作結,不可中途停筆或在列舉清單處打住。`;
+語氣:專業、客觀、精準。全文控制在約 450-600 字(英文版約 300-450 words),寧可精煉也不要冗長;各節 2-3 句即可,務必完整寫到「資料與限制說明」一節作結,不可中途停筆或在列舉清單處打住。`;
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -162,7 +165,8 @@ export default async (req) => {
         controller.enqueue(encoder.encode("\n\n(串流中斷:" + (e.message || e) + ")"));
       }
       // 估算成本(claude-sonnet-4-6 牌價,每百萬 token,USD)
-      const PRICE = { in: 3, out: 15, cacheWrite: 3.75, cacheRead: 0.30 };
+      // claude-haiku-4-5 牌價(每百萬 token,USD)
+      const PRICE = { in: 1, out: 5, cacheWrite: 1.25, cacheRead: 0.10 };
       const cost =
         (usage.input_tokens * PRICE.in + usage.output_tokens * PRICE.out +
          usage.cache_creation_input_tokens * PRICE.cacheWrite +

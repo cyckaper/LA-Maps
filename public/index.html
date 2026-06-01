@@ -10,7 +10,7 @@
   <!-- Leaflet.draw -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 
-  <link rel="stylesheet" href="./css/style.css?v=4m" />
+  <link rel="stylesheet" href="./css/style.css?v=4n" />
 </head>
 <body>
   <div id="app">
@@ -116,6 +116,14 @@
         <p class="hint" id="heat-source"></p>
       </section>
 
+      <!-- 療癒綠地介入需求 (Healing Green Intervention Priority) -->
+      <section class="panel">
+        <h2 data-i18n="hgip.h">療癒綠地介入需求</h2>
+        <p class="info-region" id="hgip-region" data-i18n="hgip.hint">按「分析周邊綠地」後,這裡綜合綠地匱乏、脆弱族群、熱壓力與開放空間可及性,研判療癒綠地介入的優先度。</p>
+        <dl class="indicators" id="hgip-indicators"></dl>
+        <p class="hint" id="hgip-source"></p>
+      </section>
+
       <!-- 生態 / 生物多樣性 (iNaturalist) -->
       <section class="panel">
         <h2 data-i18n="biodiv.h">生態 · 生物多樣性</h2>
@@ -173,8 +181,8 @@
   <!-- Marked (Markdown 渲染 AI 報告) -->
   <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
 
-  <script src="./js/i18n.js?v=4m"></script>
-  <script src="./js/openspace-service-level.js?v=4m"></script>
-  <script src="./js/app.js?v=4m"></script>
+  <script src="./js/i18n.js?v=4n"></script>
+  <script src="./js/openspace-service-level.js?v=4n"></script>
+  <script src="./js/app.js?v=4n"></script>
 </body>
 </html>

@@ -600,6 +600,9 @@
   var osslRegionEl = document.getElementById("ossl-region");
   var osslOutputEl = document.getElementById("ossl-output");
   var osslSourceEl = document.getElementById("ossl-source");
+  var hgipRegionEl = document.getElementById("hgip-region");
+  var hgipIndEl = document.getElementById("hgip-indicators");
+  var hgipSourceEl = document.getElementById("hgip-source");
 
   var OVERPASS = "https://overpass-api.de/api/interpreter";
   var GREEN_RADIUS = 500; // 公尺:服務圈半徑
@@ -627,6 +630,9 @@
     osslOutputEl.innerHTML = "";
     osslSourceEl.textContent = "";
     osslCatchment.clearLayers();
+    hgipRegionEl.textContent = t("hgip.hint");
+    hgipIndEl.innerHTML = "";
+    hgipSourceEl.textContent = "";
   }
 
   // 熱環境/健康研判:綠覆率(對 3-30-300 的 30% 目標)× 脆弱族群(高齡+幼年)
@@ -660,7 +666,74 @@
         vulnerability_level: level
       };
     }
+    renderHGIP();
   }
+
+  // ---- 療癒綠地介入需求指數(Healing Green Intervention Priority, HGIP)----
+  // 綜合四因子(綠地匱乏、脆弱族群、熱壓力、開放空間可及性不足),各 0..1 加權。
+  // 因氣候/OSSL 為非同步載入,本函式可重複呼叫:有新資料即重算,缺資料的
+  // 因子自動排除並重新正規化權重,確保任一階段都有合理結果。
+  function renderHGIP() {
+    if (!lastAnalysis) return;
+    var h = lastAnalysis.heat || {};
+    var cl = lastAnalysis.climate || {};
+    var os = lastAnalysis.openspace_service_level || {};
+
+    var factors = [];
+    // 1) 綠地匱乏:綠覆率對 30% 目標的缺口
+    if (h.green_coverage_pct != null) {
+      factors.push({ key: "green", w: 0.35,
+        v: clamp01((30 - h.green_coverage_pct) / 30), labelKey: "hg.fGreen" });
+    }
+    // 2) 脆弱族群:高齡+幼年,40% 視為高
+    if (h.elderly_share != null && h.child_share != null) {
+      factors.push({ key: "vuln", w: 0.30,
+        v: clamp01((h.elderly_share + h.child_share) / 40), labelKey: "hg.fVuln" });
+    }
+    // 3) 熱壓力:年高溫日數,90 天視為極高
+    if (cl.heat_days_per_year_ge32c != null) {
+      factors.push({ key: "heat", w: 0.20,
+        v: clamp01(cl.heat_days_per_year_ge32c / 90), labelKey: "hg.fHeat" });
+    }
+    // 4) 開放空間可及性不足:OSSL 總分越低越缺
+    if (os.overall != null) {
+      factors.push({ key: "access", w: 0.15,
+        v: clamp01((100 - os.overall) / 100), labelKey: "hg.fAccess" });
+    }
+
+    if (!factors.length) { hgipRegionEl.textContent = t("hgip.hint"); hgipIndEl.innerHTML = ""; hgipSourceEl.textContent = ""; return; }
+
+    var wsum = 0, acc = 0;
+    factors.forEach(function (f) { wsum += f.w; acc += f.w * f.v; });
+    var index = Math.round((acc / wsum) * 100); // 0..100
+
+    var levelKey = index >= 67 ? "hg.lvHigh" : index >= 34 ? "hg.lvMid" : "hg.lvLow";
+    var level = t(levelKey);
+    var color = index >= 67 ? "#d56456" : index >= 34 ? "#d8a657" : "#45c2a4";
+
+    hgipRegionEl.innerHTML = t("hg.title", { s: index, lv: level, c: color });
+    var html = "";
+    // 主導因子(貢獻度 = 權重×值,取最大者)供規劃聚焦
+    var top = factors.slice().sort(function (a, b) { return (b.w * b.v) - (a.w * a.v); })[0];
+    factors.forEach(function (f) {
+      var pct = Math.round(f.v * 100);
+      var mark = f.key === top.key ? " ◀" : "";
+      html += ind(t(f.labelKey), pct + mark, "%");
+    });
+    hgipIndEl.innerHTML = html;
+    hgipSourceEl.innerHTML = t("hg.note", { f: t(top.labelKey) });
+
+    lastAnalysis.healing_green_intervention = {
+      index: index,
+      priority_level: level,
+      dominant_factor: top.key,
+      factors: factors.map(function (f) {
+        return { key: f.key, normalized: +f.v.toFixed(2), weight: f.w };
+      })
+    };
+  }
+
+  function clamp01(x) { return Math.max(0, Math.min(1, x)); }
 
   // ---- 氣候背景(Open-Meteo ERA5)----
   function avg(arr) {
@@ -763,6 +836,7 @@
         dominant_wind_dir: dirLabel,
         avg_daily_solar_mj_m2: +avgRad.toFixed(1)
       };
+      renderHGIP(); // 氣候(熱壓力)到位,重算介入需求
     }
   }
 
@@ -796,6 +870,7 @@
               return { key: c.key, label: c.label, nearest_m: c.nearestMeters, count: c.count, score: c.S };
             })
           };
+          renderHGIP(); // 服務水準到位,重算介入需求
         }
       })
       .catch(function () {
@@ -1425,6 +1500,18 @@
       prow(t("r.t30"), MET(h.meets_30pct_target)) +
       prow(t("r.vuln"), h.vulnerability_level || "—") +
       "</table>";
+
+    var hg = lastAnalysis.healing_green_intervention;
+    if (hg) {
+      var hgFactorLabel = { green: t("hg.fGreen"), vuln: t("hg.fVuln"), heat: t("hg.fHeat"), access: t("hg.fAccess") };
+      html += "<h2>" + t("r.hHGIP") + "</h2><table class='summary'>" +
+        prow(t("r.hgipIndex"), pnum(hg.index) + " / 100(" + (hg.priority_level || "—") + ")") +
+        prow(t("r.hgipDominant"), hgFactorLabel[hg.dominant_factor] || hg.dominant_factor || "—");
+      (hg.factors || []).forEach(function (f) {
+        html += prow(hgFactorLabel[f.key] || f.key, Math.round(f.normalized * 100) + " %");
+      });
+      html += "</table>";
+    }
 
     var os = lastAnalysis.openspace_service_level;
     if (os) {

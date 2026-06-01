@@ -921,7 +921,9 @@
     };
 
     if (aqiStationsCache) { proceed(aqiStationsCache); return; }
-    fetchWithTimeout("./api/aqi", 20000)
+    // 加 cache-buster(10 分鐘一桶)避開 CDN/瀏覽器對暫時性回應的舊快取,同時仍享有合理快取
+    var aqiBust = Math.floor(Date.now() / 600000);
+    fetchWithTimeout("./api/aqi?t=" + aqiBust, 20000)
       .then(function (r) {
         if (!r.ok) return r.text().then(function (txt) {
           var msg = txt; try { var j = JSON.parse(txt); if (j && j.error) msg = j.error; } catch (e) {}

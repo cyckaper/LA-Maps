@@ -597,6 +597,9 @@
   var climateRegionEl = document.getElementById("climate-region");
   var climateIndEl = document.getElementById("climate-indicators");
   var climateSourceEl = document.getElementById("climate-source");
+  var osslRegionEl = document.getElementById("ossl-region");
+  var osslOutputEl = document.getElementById("ossl-output");
+  var osslSourceEl = document.getElementById("ossl-source");
 
   var OVERPASS = "https://overpass-api.de/api/interpreter";
   var GREEN_RADIUS = 500; // 公尺:服務圈半徑
@@ -620,6 +623,10 @@
     climateRegionEl.textContent = t("climate.hint");
     climateIndEl.innerHTML = "";
     climateSourceEl.textContent = "";
+    osslRegionEl.textContent = t("ossl.hint");
+    osslOutputEl.innerHTML = "";
+    osslSourceEl.textContent = "";
+    osslCatchment.clearLayers();
   }
 
   // 熱環境/健康研判:綠覆率(對 3-30-300 的 30% 目標)× 脆弱族群(高齡+幼年)
@@ -757,6 +764,49 @@
         avg_daily_solar_mj_m2: +avgRad.toFixed(1)
       };
     }
+  }
+
+  // ---- 開放空間服務水準(OpenSpaceServiceLevel 模組)----
+  var osslCatchment = L.layerGroup().addTo(map);
+
+  // 依基地中心點計算步行 10 分鐘可及性服務水準,並畫涵蓋圈
+  function loadOSSL(lat, lng) {
+    if (!global_OSSL()) { osslRegionEl.textContent = t("ossl.unavailable"); return; }
+    osslRegionEl.textContent = t("ossl.loading");
+    osslOutputEl.innerHTML = "";
+    osslSourceEl.textContent = "";
+    osslCatchment.clearLayers();
+    global_OSSL().compute(lat, lng)
+      .then(function (r) {
+        osslRegionEl.innerHTML = t("ossl.title", { s: Math.round(r.overall), b: r.band.name, c: r.band.color });
+        osslOutputEl.innerHTML = global_OSSL().renderHTML(r);
+        osslSourceEl.innerHTML = t("ossl.note");
+        // 地圖畫 10 分鐘步行涵蓋圈
+        try {
+          osslCatchment.clearLayers();
+          global_OSSL().drawCatchment(osslCatchment, lat, lng);
+        } catch (e) { /* 畫圈失敗不影響數據 */ }
+        if (lastAnalysis) {
+          lastAnalysis.openspace_service_level = {
+            overall: r.overall,
+            band: r.band.name,
+            catchment_radius_m: r.catchmentRadiusMeters,
+            ai_summary: global_OSSL().summaryForAI(r),
+            categories: r.categories.map(function (c) {
+              return { key: c.key, label: c.label, nearest_m: c.nearestMeters, count: c.count, score: c.S };
+            })
+          };
+        }
+      })
+      .catch(function () {
+        osslRegionEl.textContent = t("ossl.offline");
+        osslSourceEl.textContent = "";
+      });
+  }
+
+  // OSSL 模組可能尚未載入(網路/快取),統一以函式取用避免 ReferenceError
+  function global_OSSL() {
+    return (typeof window !== "undefined" && window.OpenSpaceServiceLevel) || null;
   }
 
   // 把 Overpass element(way 或 relation)轉成一個或多個帶屬性的 turf polygon
@@ -903,6 +953,7 @@
         };
         renderHeat(coverage, lastRegionProps);
         loadClimate((bb[1] + bb[3]) / 2, (bb[0] + bb[2]) / 2);
+        loadOSSL((bb[1] + bb[3]) / 2, (bb[0] + bb[2]) / 2);
 
         greenSourceEl.innerHTML = t("g.noteSite");
       })
@@ -957,6 +1008,8 @@
             green: { radius_m: GREEN_RADIUS, parks_found: 0 }
           };
           renderHeat(0, lastRegionProps);
+          loadClimate(lat, lng);
+          loadOSSL(lat, lng);
           return;
         }
 
@@ -1050,6 +1103,7 @@
         };
         renderHeat(coverage, lastRegionProps);
         loadClimate(lat, lng);
+        loadOSSL(lat, lng);
 
         greenSourceEl.innerHTML = t("g.noteRadius");
       })
@@ -1369,6 +1423,19 @@
       prow(t("r.t30"), MET(h.meets_30pct_target)) +
       prow(t("r.vuln"), h.vulnerability_level || "—") +
       "</table>";
+
+    var os = lastAnalysis.openspace_service_level;
+    if (os) {
+      html += "<h2>" + t("r.hOSSL") + "</h2><table class='summary'>" +
+        prow(t("r.osslOverall"), pnum(os.overall) + "(" + (os.band || "—") + ")") +
+        prow(t("r.osslCatch"), pnum(os.catchment_radius_m, " m"));
+      (os.categories || []).forEach(function (c) {
+        html += prow(c.label,
+          (c.nearest_m == null ? "—" : c.nearest_m + " m") + " · " +
+          c.count + t("r.uSpot") + " · " + Math.round(c.score));
+      });
+      html += "</table>";
+    }
 
     var b = lastAnalysis.biodiversity;
     if (b) {

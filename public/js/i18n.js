@@ -8,8 +8,8 @@
   "use strict";
 
   var DICT = {
-    "app.title": { zh: "基地分析工作站", en: "Site Analysis Studio" },
-    "app.subtitle": { zh: "Site Analysis Studio · 真實台灣圖資", en: "Real Taiwan Open Data" },
+    "app.title": { zh: "AI 基地分析工作站", en: "AI Site Analysis Studio" },
+    "app.subtitle": { zh: "AI Site Analysis Studio · 真實台灣圖資", en: "Real Taiwan Open Data" },
 
     "search.h": { zh: "地名搜尋", en: "Place Search" },
     "search.placeholder": { zh: "輸入地名,例如:台灣大學", en: "Enter a place, e.g. NTU" },
@@ -99,7 +99,7 @@
       zh: "張俊彥 國立臺灣大學園藝暨景觀學系特聘教授",
       en: "Chun-Yen Chang, Distinguished Professor, Department of Horticulture and Landscape Architecture, National Taiwan University"
     },
-    "foot": { zh: "© 2026 基地分析工作站 · Site Analysis Studio · 僅供參考", en: "© 2026 Site Analysis Studio · For reference only" },
+    "foot": { zh: "© 2026 AI 基地分析工作站 · AI Site Analysis Studio · 僅供參考", en: "© 2026 AI Site Analysis Studio · For reference only" },
 
     "lang.toggle": { zh: "EN", en: "中" },
 

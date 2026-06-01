@@ -871,8 +871,17 @@
     aqiIndEl.innerHTML = "";
     aqiSourceEl.textContent = "";
 
-    var proceed = function (stations) {
-      if (!stations || !stations.length) { aqiRegionEl.textContent = t("aqi.nodata"); return; }
+    var proceed = function (payload) {
+      var stations = (payload && payload.stations) || [];
+      if (!stations.length) {
+        aqiRegionEl.textContent = t("aqi.nodata");
+        // 顯示診斷:原始筆數與欄位名,協助定位欄位不符問題
+        if (payload && payload.rawCount != null) {
+          aqiSourceEl.textContent = "diag: rawCount=" + payload.rawCount +
+            " keys=" + ((payload.sampleKeys || []).join(",") || "—");
+        }
+        return;
+      }
       // 找最近測站
       var best = null, bestD = Infinity;
       stations.forEach(function (s) {
@@ -920,7 +929,7 @@
         });
         return r.json();
       })
-      .then(function (data) { aqiStationsCache = data.stations || []; proceed(aqiStationsCache); })
+      .then(function (data) { aqiStationsCache = data; proceed(aqiStationsCache); })
       .catch(function (e) {
         // 顯示實際錯誤以利診斷(環境變數未設、function 未部署、上游錯誤等)
         var detail = e && e.message ? e.message : String(e);

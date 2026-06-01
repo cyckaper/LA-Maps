@@ -71,9 +71,19 @@ export default async (req) => {
   let userContent;
   if (isComments) {
     const comments = Array.isArray(data.comments) ? data.comments.filter(function (c) { return c && String(c).trim(); }) : [];
+    const totalInScope = (typeof data.total_in_scope === "number") ? data.total_in_scope : comments.length;
+    const truncated = data.truncated === true && totalInScope > comments.length;
+    // 依實際情況產生「準確」的免責句(不讓模型自行編造筆數或抽樣方式)
+    const caveat = lang === "en"
+      ? (truncated
+          ? ("Caveat: this reflects only the first " + comments.length + " of " + totalInScope + " text comments within the selected area (taken in file order, not sampled), and does not represent all visitors.")
+          : ("Caveat: this reflects only the " + comments.length + " text comments within the selected area, and does not represent all visitors."))
+      : (truncated
+          ? ("提醒:本摘要僅反映選定範圍內 " + totalInScope + " 則文字意見中、依檔案順序的前 " + comments.length + " 則(非抽樣),不代表所有訪客。")
+          : ("提醒:本摘要僅反映選定範圍內所上傳的 " + comments.length + " 則文字意見,不代表所有訪客。"));
     systemPrompt = lang === "en"
-      ? "You are an analyst summarizing community/user comments about a place. From the provided list of comments, identify the main recurring themes (3-6), each with a short label, how common it is, and 1-2 representative quotes. Note overall sentiment if discernible. Be concise, use Markdown headings/lists. Only use the provided comments; do not invent. End with a one-line caveat that this reflects only the uploaded comments within the selected area."
-      : "你是分析地點使用者意見的助理。請從提供的意見清單中,歸納出主要、反覆出現的主題(3-6 個),每個主題給簡短標題、常見程度,以及 1-2 句代表性原句引用;若可判斷請點出整體情緒傾向。務求精煉,使用 Markdown 標題與條列。只能根據提供的意見,不可杜撰。結尾以一句話提醒:本摘要僅反映選定範圍內所上傳的意見,不代表全體。";
+      ? ("You are an analyst summarizing community/user comments about a place. From the provided list of comments, identify the main recurring themes (3-6), each with a short label, how common it is, and 1-2 representative quotes. Note overall sentiment if discernible. Be concise, use Markdown headings/lists. Only use the provided comments; do not invent. Do NOT state any comment count yourself. End with EXACTLY this caveat line verbatim: " + caveat)
+      : ("你是分析地點使用者意見的助理。請從提供的意見清單中,歸納出主要、反覆出現的主題(3-6 個),每個主題給簡短標題、常見程度,以及 1-2 句代表性原句引用;若可判斷請點出整體情緒傾向。務求精煉,使用 Markdown 標題與條列。只能根據提供的意見,不可杜撰。請勿自行宣稱任何意見筆數。結尾請「原文照抄」以下這句免責提醒:" + caveat);
     const head = lang === "en"
       ? ("Comments" + (data.region ? " near " + data.region : "") + " (" + comments.length + " items):\n\n")
       : ("以下為" + (data.region ? data.region + "附近" : "選定範圍內") + "的使用者意見(共 " + comments.length + " 則):\n\n");

@@ -1041,12 +1041,17 @@
     }
     cmAiBtn.disabled = true;
     cmSummaryEl.insertAdjacentHTML("beforeend", "<p class='ai-loading' id='cm-ai-loading'>" + t("cm.aiLoading") + "</p>");
-    var comments = cmState.inScope.map(function (p) { return p.comment; })
-      .filter(function (c) { return c && c.trim(); }).slice(0, 200); // 上限 200 則避免過長
+    var CM_AI_LIMIT = 200; // AI 摘要送出上限(避免請求過長)
+    var withText = cmState.inScope.map(function (p) { return p.comment; })
+      .filter(function (c) { return c && c.trim(); });
+    var comments = withText.slice(0, CM_AI_LIMIT); // 超過上限時取依檔案順序的前 N 則(不抽樣)
     var payload = {
       mode: "comments_summary",
       lang: (window.i18nLang ? window.i18nLang() : "zh"),
       comments: comments,
+      total_in_scope: withText.length,   // 範圍內有文字意見總數
+      sent_count: comments.length,        // 實際送出筆數
+      truncated: withText.length > comments.length, // 是否因上限截斷(取前 N 則)
       region: lastRegionTitle || null
     };
     fetchWithTimeout("./api/analyze", 60000, {

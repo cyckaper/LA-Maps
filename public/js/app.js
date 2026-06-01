@@ -104,6 +104,7 @@
     { id: "LUIMAP", label: "國土利用調查(綠地/土地利用)", type: "nlsc" },
     { id: "SCHOOL", label: "各級學校範圍(學區)", type: "nlsc" },
     { id: "LANDSECT", label: "段籍圖(地籍)", type: "nlsc" },
+    { id: "USAGEZONE", label: "都市計畫使用分區(公私有判讀)", type: "nlsc", layer: "USAGEZONE" },
     { id: "LIQUEFACTION", label: "土壤液化潛勢", type: "geo", layer: "WMS/Geomap_Envi_Soil_liquefatcion_2021" },
     { id: "FAULT", label: "活動斷層分布線(2021)", type: "geo", layer: "WMS/25K_Geomap_fault_2021" },
     { id: "FAULT_ZONE", label: "活動斷層地質敏感區(帶狀)", type: "geo", layer: "WMS/Sensitive_area_fault" }
@@ -112,7 +113,7 @@
   OVERLAY_DEFS.forEach(function (def) {
     overlays[def.id] = def.type === "geo"
       ? geoOverlay(def.layer, def)
-      : nlscOverlay(def.id, def);
+      : nlscOverlay(def.layer || def.id, def);
   });
   function bringOverlaysToFront() {
     OVERLAY_DEFS.forEach(function (def) {

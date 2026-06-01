@@ -898,6 +898,7 @@
   var cmMappingEl = document.getElementById("cm-mapping");
   var cmIndEl = document.getElementById("cm-indicators");
   var cmSummaryEl = document.getElementById("cm-summary");
+  var cmAiOutputEl = document.getElementById("cm-ai-output");
   var cmActionsEl = document.getElementById("cm-actions");
   var cmAiBtn = document.getElementById("cm-ai");
   var cmSourceEl = document.getElementById("cm-source");
@@ -987,6 +988,8 @@
 
     cmRegionEl.innerHTML = t("cm.result", { n: scope.length, total: cmState.allPoints.length, scope: scopeDesc });
 
+    // 範圍變更:清掉舊的 AI 摘要(屬前一範圍,避免殘留誤導)
+    cmAiOutputEl.innerHTML = "";
     // 本地詞頻摘要
     var sum = CL().summarize(scope, { topN: 12, sampleN: 5 });
     cmState.summary = sum;
@@ -1011,6 +1014,7 @@
       ind(t("cm.count"), sum.total, t("cm.unitPt")) +
       ind(t("cm.withText"), sum.withComment, t("cm.unitPt"));
     var html = "";
+    html += "<h3 class='cm-sec-title'>" + t("cm.localTitle") + "</h3>";
     if (sum.topWords.length) {
       var max = sum.topWords[0].count;
       html += "<div class='ghdr' style='grid-column:1/-1'>" + t("cm.topWords") + "</div>";
@@ -1040,7 +1044,8 @@
       return;
     }
     cmAiBtn.disabled = true;
-    cmSummaryEl.insertAdjacentHTML("beforeend", "<p class='ai-loading' id='cm-ai-loading'>" + t("cm.aiLoading") + "</p>");
+    // 固定的 AI 輸出容器:每次按都覆寫,避免重複堆疊多個摘要
+    cmAiOutputEl.innerHTML = "<p class='ai-loading'>" + t("cm.aiLoading") + "</p>";
     var CM_AI_LIMIT = 200; // AI 摘要送出上限(避免請求過長)
     var withText = cmState.inScope.map(function (p) { return p.comment; })
       .filter(function (c) { return c && c.trim(); });
@@ -1070,16 +1075,17 @@
         return r.text();
       })
       .then(function (txt) {
-        var el = document.getElementById("cm-ai-loading"); if (el) el.remove();
-        var box = document.createElement("div");
-        box.className = "ai-output";
-        box.innerHTML = renderReport(txt || t("ai.empty"));
-        cmSummaryEl.appendChild(box);
-        if (lastAnalysis && lastAnalysis.user_comments) lastAnalysis.user_comments.ai_theme_summary = txt;
+        var sp = splitUsage(txt);
+        // 覆寫固定容器(不累積);加明確的 AI 標題,與本地關鍵詞統計區隔
+        cmAiOutputEl.innerHTML =
+          "<h3 class='cm-sec-title'>" + t("cm.aiTitle") + "</h3>" +
+          "<div class='ai-output'>" + renderReport(sp.text || t("ai.empty")) + "</div>" +
+          (sp.usage ? "<p class='hint'>" + renderUsageNote(sp.usage) + "</p>" : "");
+        if (lastAnalysis && lastAnalysis.user_comments) lastAnalysis.user_comments.ai_theme_summary = sp.text;
       })
       .catch(function (err) {
-        var el = document.getElementById("cm-ai-loading"); if (el) el.remove();
-        cmSourceEl.innerHTML = "<span class='ai-err'>" + t("ai.fail") + " " + String(err && err.message || err) + "</span>";
+        cmAiOutputEl.innerHTML =
+          "<p class='ai-err'>" + t("ai.fail") + " " + String(err && err.message || err) + "</p>";
       })
       .finally(function () { cmAiBtn.disabled = false; });
   });
@@ -1520,6 +1526,29 @@
   var aiSource = document.getElementById("ai-source");
 
   // 將報告(Markdown)轉為 HTML;有 marked 就用,否則退回純文字段落
+  // 從串流文字尾端切出後端附加的用量標記(若有),回傳 { text, usage }
+  var lastUsage = null;
+  function splitUsage(raw) {
+    if (!raw) return { text: raw, usage: null };
+    var marker = "\n␞ USAGE ␞";
+    var i = raw.indexOf(marker);
+    if (i < 0) return { text: raw, usage: null };
+    var body = raw.slice(0, i);
+    var usage = null;
+    try { usage = JSON.parse(raw.slice(i + marker.length)); } catch (e) { usage = null; }
+    return { text: body, usage: usage };
+  }
+  function renderUsageNote(u) {
+    if (!u) return "";
+    var nt = function (n) { return (n || 0).toLocaleString(); };
+    var usd = u.cost_usd != null ? u.cost_usd : 0;
+    var twd = (usd * 32).toFixed(2); // 概算匯率
+    return t("usage.note", {
+      in: nt(u.input_tokens), out: nt(u.output_tokens),
+      cr: nt(u.cache_read_input_tokens), usd: usd.toFixed(5), twd: twd
+    });
+  }
+
   function renderReport(text) {
     if (window.marked && typeof window.marked.parse === "function") {
       try {
@@ -1574,7 +1603,8 @@
         if (!r.body || !r.body.getReader) {
           // 舊瀏覽器無串流:整段讀取
           return r.text().then(function (txt) {
-            aiOutput.innerHTML = renderReport(txt || t("ai.empty"));
+            var sp = splitUsage(txt); lastUsage = sp.usage;
+            aiOutput.innerHTML = renderReport(sp.text || t("ai.empty"));
           });
         }
         var reader = r.body.getReader();
@@ -1582,9 +1612,14 @@
         var acc = "";
         function pump() {
           return reader.read().then(function (res) {
-            if (res.done) { aiOutput.innerHTML = renderReport(acc || t("ai.empty")); return; }
+            if (res.done) {
+              var sp = splitUsage(acc); lastUsage = sp.usage;
+              aiOutput.innerHTML = renderReport(sp.text || t("ai.empty"));
+              return;
+            }
             acc += decoder.decode(res.value, { stream: true });
-            aiOutput.innerHTML = renderReport(acc);
+            // 串流中先把可能尚未完整的 USAGE 標記切掉再渲染
+            aiOutput.innerHTML = renderReport(splitUsage(acc).text);
             aiOutput.scrollTop = aiOutput.scrollHeight;
             return pump();
           });
@@ -1592,7 +1627,7 @@
         return pump();
       })
       .then(function () {
-        aiSource.textContent = t("ai.by");
+        aiSource.innerHTML = t("ai.by") + (lastUsage ? " · " + renderUsageNote(lastUsage) : "");
       })
       .catch(function (err) {
         var msg = String(err && err.message ? err.message : err);

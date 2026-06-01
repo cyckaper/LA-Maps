@@ -10,7 +10,7 @@
 
 | 網址 | 後端 | AI 解讀 | 用途 |
 |---|---|---|---|
-| **https://healsdesign.org**(Netlify) | ✅ Netlify Functions | ✅ 可用 | **主要版本** |
+| **https://map.healsdesign.org**(Netlify) | ✅ Netlify Functions | ✅ 可用 | **主要版本** |
 | https://la-maps.pages.dev | ✅ Cloudflare Pages | ✅ 可用 | 備援 |
 | https://cyckaper.github.io/LA-Maps/ | ❌ 純靜態 | ❌ 不可 | 前端預覽 |
 
@@ -127,7 +127,9 @@
 - **Netlify**:<https://app.netlify.com> → 你的 Team → **Usage**(流量、Function 呼叫數)、**Billing**。
 - **GitHub**:公開 repo 免費,無需查帳。
 
-> ⚠️ Anthropic 沒有「逐次明細」即時彈窗;是在 Console 的 Usage 以**逐日彙總**呈現 token 與金額。要精準追每一次成本,可在 Function 記錄回應的 `usage`(input/output token)——目前未做,需要的話可加。
+> ⚠️ Anthropic Console 的 Usage 是**逐日彙總**,非逐次明細。本工具已另做**逐次追蹤**:每次 AI 呼叫後,後端會記錄該次 token 與估算成本(見下),前端也會在 AI 結果下方顯示「本次用量」。
+>
+> **逐次 token 追蹤**:`netlify/functions/analyze.mjs` 從 Anthropic 串流擷取 `usage`(輸入/輸出/快取 token),`console.log` 成 `[analyze usage] {...}`(可在 **Netlify → Functions → analyze → Logs** 查每一次),並把該筆 meta 附在回應尾端;前端解析後在 AI 報告/意見摘要下方顯示「本次用量:輸入 X、輸出 Y token · 約 US$… (≈NT$…)」。
 
 ---
 
@@ -173,11 +175,11 @@ npx serve public          # 或 python3 -m http.server -d public
 
 ## 部署
 
-### Netlify(主要,含 AI,掛自有網域 healsdesign.org)
+### Netlify(主要,含 AI,掛自有網域 map.healsdesign.org)
 1. Add new site → Import an existing project → 選本 repo(`netlify.toml` 已含 build 設定)
 2. Site configuration → Environment variables:`ANTHROPIC_API_KEY` = Anthropic API 金鑰 → 重新部署
 3. 後端 `netlify/functions/analyze.mjs` 以 Functions 2.0 的 `config.path` 直接掛在 `/api/analyze`
-4. Domain management → Add a domain → `healsdesign.org`(DNS 已在 Netlify,SSL 自動)
+4. Domain management → Add a domain → `map.healsdesign.org`(DNS 已在 Netlify,SSL 自動)
 
 ### Cloudflare Pages(備援,含 AI)
 1. Workers & Pages → Create → Pages → Connect to Git → 選本 repo

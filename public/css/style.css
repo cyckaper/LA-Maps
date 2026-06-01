@@ -356,6 +356,21 @@ html, body {
 .biolist.warn dt { color: var(--danger-hover); }
 .biolist.warn li { color: var(--danger-hover); }
 
+/* ---------- 開放空間服務水準 (OSSL) ---------- */
+.ossl { margin: 4px 0 0; }
+.ossl-hero { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 6px; }
+.ossl-num { font-size: 30px; font-weight: 700; line-height: 1; }
+.ossl-band { font-size: 13px; font-weight: 600; }
+.ossl-cap { font-size: 11px; color: var(--text-dim); width: 100%; }
+.ossl-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ossl-table th { text-align: left; font-weight: 600; color: var(--text-dim); padding: 2px 4px; border-bottom: 1px solid var(--border); }
+.ossl-table td { padding: 3px 4px; vertical-align: middle; }
+.ossl-table th:nth-child(n+2), .ossl-table td:nth-child(n+2) { text-align: right; white-space: nowrap; }
+.ossl-cat { position: relative; }
+.ossl-bar { height: 3px; border-radius: 2px; margin-top: 3px; min-width: 2px; opacity: 0.85; }
+.ossl-s { font-weight: 600; }
+.ossl-note { font-size: 11px; color: var(--text-dim); line-height: 1.5; margin: 6px 0 0; }
+
 /* ---------- 版權 / 匯出 ---------- */
 #export-btn { width: 100%; margin-top: 8px; }
 .credits-list {

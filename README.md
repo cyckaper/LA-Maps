@@ -1,4 +1,4 @@
-# 基地分析工作站 · Site Analysis Studio
+# HEALS 基地分析工作站 · HEALS Site Analysis Studio
 
 以**真實台灣政府開放圖資**為基礎的基地（site）分析網頁工具:在地圖上放標記或畫出基地範圍,即可一次取得**人口結構、開放空間/綠地可及性、熱環境與健康研判、法規對照**,並由 **Claude AI** 產出可讀的綜合報告、匯出 PDF。
 
@@ -59,23 +59,75 @@
 
 ## 架構
 
+三段式:**GitHub(原始碼)→ Netlify(部署網站 + 後端代理,保管 API 金鑰)→ Anthropic(Claude)**。
+
 ```
-┌─────────────────────────────────────────────┐
-│ 瀏覽器 (public/)                              │
-│  Leaflet 地圖 + turf.js 量測                  │
-│  ├─ NLSC WMTS 圖磚 / 地質調查所 WMS           │
-│  ├─ public/data/*.json(界線+人口,建置時產) │
-│  ├─ OSM Overpass(綠地,即時)/ Nominatim     │
-│  └─ POST /api/analyze ──────────┐             │
-└─────────────────────────────────┼────────────┘
-                                   ▼
-            Cloudflare Pages Function (functions/api/analyze.js)
-            持環境變數 ANTHROPIC_API_KEY → 呼叫 Anthropic API
+┌─ GitHub (cyckaper/la-maps) ────────────────── 原始碼 + 版本控制
+│        │  push 觸發自動部署
+│        ▼
+├─ Netlify ─────────────────────────────────── 部署 · 託管 · 後端
+│   ├─ public/                  靜態網站(HTML/CSS/JS、Leaflet 地圖)
+│   └─ netlify/functions/analyze.mjs   後端 Function(/api/analyze)
+│        持環境變數 ANTHROPIC_API_KEY,代理呼叫 ↓
+│        ▼
+└─ Anthropic API (claude-sonnet-4-6) ───────── AI 報告 / 意見摘要
+```
+
+前端另直接呼叫多個**免金鑰公開 API**(不經後端):
+
+```
+瀏覽器 (public/) 直接取用:
+  ├─ NLSC WMTS 圖磚 / 地質調查所 WMS      底圖與疊圖
+  ├─ public/data/*.json                  界線 + 人口(建置時產生)
+  ├─ OSM Overpass                        綠地、開放空間服務水準
+  ├─ OSM Nominatim                       地名搜尋
+  ├─ Open-Meteo (ERA5)                   氣候背景
+  ├─ iNaturalist                         生態 · 生物多樣性
+  └─ unpkg CDN (SheetJS)                 .xlsx 解析(意見圖層)
 ```
 
 - **前端**:純靜態(`public/`),無框架,vanilla JS。
 - **資料**:`public/data/{towns,villages,meta}.json` 由 `scripts/build-data.mjs` 於**建置時**抓取界線 + 戶政人口產生(不進版控)。
-- **後端**:`functions/api/analyze.js`(Cloudflare Pages Function),持金鑰呼叫 Claude;前端金鑰不外露。
+- **後端**:`netlify/functions/analyze.mjs`(Netlify Function),持金鑰呼叫 Claude;**金鑰存於 Netlify 環境變數,前端永不外露**。AI 呼叫用串流(`stream:true`)避免 Netlify 閒置逾時(504)。
+- **使用者上傳的 Excel 意見**:僅存在瀏覽器;唯有按「AI 摘要意見主題」才會把範圍內意見經後端送 Anthropic。
+
+> 註:repo 內 `functions/api/`(Cloudflare 格式)為**未使用的備援**;實際部署只跑 `netlify/functions/`(見 `netlify.toml`)。
+
+---
+
+## 成本
+
+各節點是否收費、以及「在哪看帳單」:
+
+| 節點 | 收費? | 計費方式 | 哪裡看用量/帳單 |
+|---|---|---|---|
+| **GitHub**(公開 repo) | 免費 | — | github.com → Settings → Billing |
+| **Netlify**(託管 + Functions) | 免費額度內 | 免費方案:每月 100 GB 流量、Functions 12.5 萬次呼叫/125 萬次·秒執行;超量才付費 | Netlify → Team → **Usage** / **Billing** |
+| **Anthropic API**(Claude) | **是,按用量** | 依 **token** 計費(輸入 + 輸出),`claude-sonnet-4-6`:約 **US$3 / 百萬輸入 token**、**US$15 / 百萬輸出 token** | console.anthropic.com → **Usage** / **Billing**(可設用量上限與額度警示) |
+| NLSC / 地質所 / Overpass / Nominatim / Open-Meteo / iNaturalist | 免費 | 公開政府/開源服務,免金鑰 | — |
+| unpkg(SheetJS CDN) | 免費 | 公共 CDN | — |
+
+**唯一會持續產生費用的是 Anthropic API**,其餘在正常使用量下都在免費額度內。
+
+### Anthropic 每次大約多少錢?
+
+以本工具的用法估算(`claude-sonnet-4-6`,2026/06 牌價;**實際以官方為準**):
+
+| 操作 | 輸入 token(約) | 輸出 token(約) | 每次約略成本 |
+|---|---|---|---|
+| **產生 AI 基地分析報告** | ~2,000(系統提示+數據,且系統提示有 **prompt caching** 折扣) | ~1,500(七節報告) | **約 US$0.02–0.03(約 NT$0.7–1)** |
+| **AI 摘要意見主題** | 視意見則數,~1,000–6,000 | ~600 | **約 US$0.01–0.03(約 NT$0.3–1)** |
+
+- 粗估:**每次 AI 動作約新台幣 1 元上下**;1 美元大約可跑 30–50 次報告。
+- **省錢設計**:系統提示已開 **prompt caching**(重複部分打折);意見摘要上限 200 則;只有「按按鈕」才呼叫 AI,瀏覽看地圖/疊圖/詞頻統計**完全不花錢**。
+
+### 在哪裡看每次收費
+
+- **Anthropic**:<https://console.anthropic.com> → **Usage**(逐日 token 與費用)、**Billing**(帳單、儲值、**Limits** 可設每月上限與 email 警示)。建議設一個**月度上限**避免意外。
+- **Netlify**:<https://app.netlify.com> → 你的 Team → **Usage**(流量、Function 呼叫數)、**Billing**。
+- **GitHub**:公開 repo 免費,無需查帳。
+
+> ⚠️ Anthropic 沒有「逐次明細」即時彈窗;是在 Console 的 Usage 以**逐日彙總**呈現 token 與金額。要精準追每一次成本,可在 Function 記錄回應的 `usage`(input/output token)——目前未做,需要的話可加。
 
 ---
 
@@ -83,17 +135,22 @@
 
 ```
 .
-├── public/                  # 靜態網站(部署輸出目錄)
+├── public/                       # 靜態網站(部署輸出目錄)
 │   ├── index.html
 │   ├── css/style.css
-│   ├── js/app.js            # 主程式(地圖、分析、AI、匯出)
-│   └── data/                # 建置時產生(gitignored)
-│       ├── towns.json       # 鄉鎮市區界線 + 人口指標
-│       ├── villages.json    # 村里界線 + 人口指標
-│       └── meta.json        # 資料來源、統計期、對應率
-├── functions/api/analyze.js # Cloudflare Function:/api/analyze
-├── scripts/build-data.mjs   # 界線 + 人口資料建置腳本
-├── .github/workflows/pages.yml # GitHub Pages 自動部署
+│   ├── js/
+│   │   ├── app.js                # 主程式(地圖、分析、AI、匯出)
+│   │   ├── i18n.js               # 中英雙語字典
+│   │   ├── openspace-service-level.js  # 開放空間服務水準模組
+│   │   └── comments-layer.js     # 使用者意見圖層(xlsx/csv 上傳)
+│   └── data/                     # 建置時產生(gitignored)
+│       ├── towns.json            # 鄉鎮市區界線 + 人口指標
+│       ├── villages.json         # 村里界線 + 人口指標
+│       └── meta.json             # 資料來源、統計期、對應率
+├── netlify/functions/analyze.mjs # ★ 實際部署的後端:/api/analyze
+├── functions/api/analyze.js      # (未使用,Cloudflare 格式備援)
+├── scripts/build-data.mjs        # 界線 + 人口資料建置腳本
+├── netlify.toml                  # Netlify 部署設定
 └── package.json
 ```
 

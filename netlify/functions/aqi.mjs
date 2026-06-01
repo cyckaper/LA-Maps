@@ -46,26 +46,53 @@ export default async (req) => {
     return json({ error: "環境部 AQI 回應非預期格式。" }, 502);
   }
 
-  const records = Array.isArray(data.records) ? data.records : [];
-  // 只挑前端需要的欄位,過濾無經緯度者
+  // 環境部 v2 通常為 data.records,但不同資料集/版本也可能放在 result.records 或 data 陣列
+  const records = Array.isArray(data.records) ? data.records
+    : (data.result && Array.isArray(data.result.records)) ? data.result.records
+    : Array.isArray(data) ? data : [];
+
+  // 依候選欄位名(不分大小寫)取值,因應環境部欄位命名差異
+  const pick = (r, names) => {
+    for (const n of names) {
+      if (r[n] != null && r[n] !== "") return r[n];
+    }
+    // 大小寫不敏感退路
+    const lowerMap = {};
+    for (const k of Object.keys(r)) lowerMap[k.toLowerCase()] = r[k];
+    for (const n of names) {
+      const v = lowerMap[n.toLowerCase()];
+      if (v != null && v !== "") return v;
+    }
+    return undefined;
+  };
+  const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+
   const stations = records.map((r) => {
-    const lat = parseFloat(r.latitude), lng = parseFloat(r.longitude);
-    if (!isFinite(lat) || !isFinite(lng)) return null;
+    const lat = num(pick(r, ["latitude", "lat", "twd97lat", "y"]));
+    const lng = num(pick(r, ["longitude", "lon", "lng", "twd97lon", "x"]));
+    if (lat == null || lng == null) return null;
     return {
-      site: r.sitename || "",
-      county: r.county || "",
-      aqi: r.aqi === "" ? null : (parseInt(r.aqi, 10) || null),
-      status: r.status || "",
-      pollutant: r.pollutant || "",
-      pm25: r["pm2.5"] === "" ? null : (parseFloat(r["pm2.5"]) || null),
-      pm10: r.pm10 === "" ? null : (parseFloat(r.pm10) || null),
-      o3: r.o3 === "" ? null : (parseFloat(r.o3) || null),
-      publishtime: r.publishtime || "",
+      site: pick(r, ["sitename", "site", "站名"]) || "",
+      county: pick(r, ["county", "縣市"]) || "",
+      aqi: (() => { const v = pick(r, ["aqi", "AQI"]); const n = parseInt(v, 10); return isFinite(n) ? n : null; })(),
+      status: pick(r, ["status", "狀態"]) || "",
+      pollutant: pick(r, ["pollutant", "主要污染物"]) || "",
+      pm25: num(pick(r, ["pm2.5", "pm25", "PM2.5"])),
+      pm10: num(pick(r, ["pm10", "PM10"])),
+      o3: num(pick(r, ["o3", "O3"])),
+      publishtime: pick(r, ["publishtime", "datacreationdate", "發布時間"]) || "",
       lat: lat, lng: lng
     };
   }).filter(Boolean);
 
-  return json({ stations: stations, count: stations.length });
+  const out = { stations: stations, count: stations.length };
+  // 診斷:當原始有資料卻全被濾除(多半是欄位名不符),回傳樣本以利定位
+  if (stations.length === 0) {
+    out.rawCount = records.length;
+    out.sampleKeys = records.length ? Object.keys(records[0]) : Object.keys(data);
+    out.responseKeys = Object.keys(data);
+  }
+  return json(out);
 };
 
 // Netlify Functions 2.0:掛在 /api/aqi

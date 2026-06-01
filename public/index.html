@@ -10,7 +10,7 @@
   <!-- Leaflet.draw -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 
-  <link rel="stylesheet" href="./css/style.css?v=4t" />
+  <link rel="stylesheet" href="./css/style.css?v=4u" />
 </head>
 <body>
   <div id="app">
@@ -116,6 +116,14 @@
         <p class="hint" id="heat-source"></p>
       </section>
 
+      <!-- 空氣品質 AQI (環境部) -->
+      <section class="panel">
+        <h2 data-i18n="aqi.h">空氣品質(AQI)</h2>
+        <p class="info-region" id="aqi-region" data-i18n="aqi.hint">按「分析周邊綠地」後,這裡顯示距基地最近的環境部測站即時空氣品質。</p>
+        <dl class="indicators" id="aqi-indicators"></dl>
+        <p class="hint" id="aqi-source"></p>
+      </section>
+
       <!-- 療癒綠地介入需求 (Healing Green Intervention Priority) -->
       <section class="panel">
         <h2 data-i18n="hgip.h">療癒綠地介入需求</h2>
@@ -170,6 +178,7 @@
           <li data-i18n="credits.geo">地質圖層(土壤液化/活動斷層):經濟部地質調查及礦業管理中心</li>
           <li data-i18n="credits.osm">綠地圖徵:© OpenStreetMap 貢獻者(ODbL),經 Overpass API 即時查詢</li>
           <li data-i18n="credits.openmeteo">氣候背景:Open-Meteo(ERA5 重分析,CC BY 4.0)</li>
+          <li data-i18n="credits.moenv">空氣品質(AQI):環境部環境資料開放平臺</li>
           <li data-i18n="credits.nominatim">地名搜尋:OpenStreetMap Nominatim</li>
           <li data-i18n="credits.inat">生物多樣性:iNaturalist(CC 觀測資料)</li>
           <li data-i18n="credits.ai">AI 解讀:Anthropic Claude</li>
@@ -199,9 +208,9 @@
   <!-- Marked (Markdown 渲染 AI 報告) -->
   <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
 
-  <script src="./js/i18n.js?v=4t"></script>
-  <script src="./js/openspace-service-level.js?v=4t"></script>
-  <script src="./js/comments-layer.js?v=4t"></script>
-  <script src="./js/app.js?v=4t"></script>
+  <script src="./js/i18n.js?v=4u"></script>
+  <script src="./js/openspace-service-level.js?v=4u"></script>
+  <script src="./js/comments-layer.js?v=4u"></script>
+  <script src="./js/app.js?v=4u"></script>
 </body>
 </html>

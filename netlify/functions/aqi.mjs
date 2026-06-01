@@ -8,6 +8,8 @@
 const MOENV_AQI = "https://data.moenv.gov.tw/api/v2/aqx_p_432";
 
 function json(obj, status = 200) {
+  // 僅成功回應才允許快取;錯誤回應一律 no-store,避免「尚未設定」等暫時性錯誤被 CDN/瀏覽器快取 10 分鐘
+  const ok = status >= 200 && status < 300;
   return new Response(JSON.stringify(obj), {
     status,
     headers: {
@@ -15,7 +17,7 @@ function json(obj, status = 200) {
       "access-control-allow-origin": "*",
       "access-control-allow-methods": "GET, OPTIONS",
       "access-control-allow-headers": "content-type",
-      "cache-control": "public, max-age=600" // AQI 每小時更新,快取 10 分鐘減少呼叫
+      "cache-control": ok ? "public, max-age=600" : "no-store" // AQI 每小時更新,成功快取 10 分鐘減少呼叫
     }
   });
 }

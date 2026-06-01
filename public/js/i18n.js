@@ -23,8 +23,8 @@
     "overlay.h": { zh: "疊圖圖層(官方圖資)", en: "Overlays (Official Data)" },
     "overlay.opacity": { zh: "透明度", en: "Opacity" },
     "overlay.hint": {
-      zh: "綠地以「國土利用調查」官方圖層為視覺實況參考(較 OSM 完整);分析數值仍以 OSM 計算。",
-      en: "Use the official Land-Use Survey overlay as a visual reference (more complete than OSM); analysis figures still come from OSM."
+      zh: "綠地以「國土利用調查」官方圖層為視覺實況參考(較 OSM 完整);分析數值仍以 OSM 計算。土地權屬(公/私有)可開啟「都市計畫使用分區」:機關、學校、公園綠地、道路等公共設施用地多為公有,住宅區、商業區多為私有(屬用途判讀,非地籍所有權)。",
+      en: "Use the official Land-Use Survey overlay as a visual reference (more complete than OSM); analysis figures still come from OSM. For land ownership (public/private), enable Urban Land-Use Zoning: government, school, park/green and road (public-facility) zones are mostly public land, while residential and commercial zones are mostly private (inferred from use, not cadastral title)."
     },
     "overlay.LUIMAP": { zh: "國土利用調查(綠地/土地利用)", en: "Land-Use Survey (green/land use)" },
     "overlay.SCHOOL": { zh: "各級學校範圍(學區)", en: "School Boundaries" },
@@ -107,6 +107,7 @@
     "ov.LUIMAP": { zh: "國土利用調查(綠地/土地利用)", en: "Land-Use Survey (green/land use)" },
     "ov.SCHOOL": { zh: "各級學校範圍(學區)", en: "School Boundaries" },
     "ov.LANDSECT": { zh: "段籍圖(地籍)", en: "Cadastral Map" },
+    "ov.USAGEZONE": { zh: "都市計畫使用分區(公私有判讀)", en: "Urban Land-Use Zoning (public/private)" },
     "ov.LIQUEFACTION": { zh: "土壤液化潛勢", en: "Soil Liquefaction Potential" },
     "ov.FAULT": { zh: "活動斷層分布線(2021)", en: "Active Fault Lines (2021)" },
     "ov.FAULT_ZONE": { zh: "活動斷層地質敏感區(帶狀)", en: "Active Fault Sensitive Zone" },

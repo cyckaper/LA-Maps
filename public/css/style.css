@@ -371,6 +371,18 @@ html, body {
 .ossl-s { font-weight: 600; }
 .ossl-note { font-size: 11px; color: var(--text-dim); line-height: 1.5; margin: 6px 0 0; }
 
+/* ---------- 使用者意見圖層 ---------- */
+.cm-map-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; }
+.cm-map-row label { flex: 0 0 72px; color: var(--text-dim); }
+.cm-map-row select { flex: 1; min-width: 0; font-size: 12px; padding: 2px 4px; }
+.cm-words { grid-column: 1 / -1; margin: 2px 0 4px; }
+.cm-word { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 2px 0; }
+.cm-word-t { flex: 0 0 84px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-word-bar { height: 8px; border-radius: 3px; background: #a87fd6; opacity: 0.85; min-width: 2px; }
+.cm-word-n { color: var(--text-dim); font-size: 11px; margin-left: auto; }
+.cm-samples { grid-column: 1 / -1; margin: 2px 0; padding-left: 18px; }
+.cm-samples li { font-size: 12px; line-height: 1.5; color: var(--text-dim); margin-bottom: 3px; }
+
 /* ---------- 版權 / 匯出 ---------- */
 #export-btn { width: 100%; margin-top: 8px; }
 .credits-list {

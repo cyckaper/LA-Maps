@@ -10,7 +10,7 @@
   <!-- Leaflet.draw -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 
-  <link rel="stylesheet" href="./css/style.css?v=4q" />
+  <link rel="stylesheet" href="./css/style.css?v=4r" />
 </head>
 <body>
   <div id="app">
@@ -133,6 +133,23 @@
         <p class="hint" id="biodiv-source"></p>
       </section>
 
+      <!-- 使用者意見圖層 (User Comments) -->
+      <section class="panel">
+        <h2 data-i18n="cm.h">使用者意見圖層</h2>
+        <p class="info-region" id="cm-region" data-i18n="cm.hint">上傳含經緯度與意見的 Excel(.xlsx)或 CSV,於地圖標示落在選定範圍/附近的點位,並摘要最常見的意見。</p>
+        <input type="file" id="cm-file" accept=".xlsx,.xls,.csv" style="display:none" />
+        <div class="btn-group">
+          <button id="cm-upload" class="tool-btn" type="button" data-i18n="cm.upload">上傳資料檔(xlsx / csv)</button>
+        </div>
+        <div id="cm-mapping" style="display:none"></div>
+        <dl class="indicators" id="cm-indicators"></dl>
+        <div id="cm-summary"></div>
+        <div class="btn-group" id="cm-actions" style="display:none">
+          <button id="cm-ai" class="tool-btn" type="button" data-i18n="cm.aiBtn">AI 摘要意見主題</button>
+        </div>
+        <p class="hint" id="cm-source"></p>
+      </section>
+
       <!-- AI 解讀 -->
       <section class="panel">
         <h2 data-i18n="ai.h">AI 解讀</h2>
@@ -181,8 +198,9 @@
   <!-- Marked (Markdown 渲染 AI 報告) -->
   <script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
 
-  <script src="./js/i18n.js?v=4q"></script>
-  <script src="./js/openspace-service-level.js?v=4q"></script>
-  <script src="./js/app.js?v=4q"></script>
+  <script src="./js/i18n.js?v=4r"></script>
+  <script src="./js/openspace-service-level.js?v=4r"></script>
+  <script src="./js/comments-layer.js?v=4r"></script>
+  <script src="./js/app.js?v=4r"></script>
 </body>
 </html>

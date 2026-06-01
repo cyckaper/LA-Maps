@@ -64,9 +64,25 @@ export default async (req) => {
   }
 
   const lang = data && data.lang === "en" ? "en" : "zh";
-  const userContent = lang === "en"
-    ? "Below are the real analysis figures (JSON) for a site. Write the site analysis report in English, following the required structure and rules. Keep Taiwanese place names and species names; you may keep scientific names as-is.\n\n```json\n" + JSON.stringify(data, null, 2) + "\n```"
-    : "以下是某基地的分析真實數值(JSON)。請據此撰寫繁體中文基地分析報告:\n\n```json\n" + JSON.stringify(data, null, 2) + "\n```";
+
+  // 意見摘要模式:只摘要使用者上傳之意見主題,不走完整基地報告
+  const isComments = data && data.mode === "comments_summary";
+  let systemPrompt = SYSTEM_PROMPT;
+  let userContent;
+  if (isComments) {
+    const comments = Array.isArray(data.comments) ? data.comments.filter(function (c) { return c && String(c).trim(); }) : [];
+    systemPrompt = lang === "en"
+      ? "You are an analyst summarizing community/user comments about a place. From the provided list of comments, identify the main recurring themes (3-6), each with a short label, how common it is, and 1-2 representative quotes. Note overall sentiment if discernible. Be concise, use Markdown headings/lists. Only use the provided comments; do not invent. End with a one-line caveat that this reflects only the uploaded comments within the selected area."
+      : "你是分析地點使用者意見的助理。請從提供的意見清單中,歸納出主要、反覆出現的主題(3-6 個),每個主題給簡短標題、常見程度,以及 1-2 句代表性原句引用;若可判斷請點出整體情緒傾向。務求精煉,使用 Markdown 標題與條列。只能根據提供的意見,不可杜撰。結尾以一句話提醒:本摘要僅反映選定範圍內所上傳的意見,不代表全體。";
+    const head = lang === "en"
+      ? ("Comments" + (data.region ? " near " + data.region : "") + " (" + comments.length + " items):\n\n")
+      : ("以下為" + (data.region ? data.region + "附近" : "選定範圍內") + "的使用者意見(共 " + comments.length + " 則):\n\n");
+    userContent = head + comments.map(function (c, i) { return (i + 1) + ". " + String(c).replace(/\n/g, " ").trim(); }).join("\n");
+  } else {
+    userContent = lang === "en"
+      ? "Below are the real analysis figures (JSON) for a site. Write the site analysis report in English, following the required structure and rules. Keep Taiwanese place names and species names; you may keep scientific names as-is.\n\n```json\n" + JSON.stringify(data, null, 2) + "\n```"
+      : "以下是某基地的分析真實數值(JSON)。請據此撰寫繁體中文基地分析報告:\n\n```json\n" + JSON.stringify(data, null, 2) + "\n```";
+  }
 
   let upstream;
   try {
@@ -81,7 +97,7 @@ export default async (req) => {
         model: MODEL,
         max_tokens: 4000, // 提高上限:報告含氣候+生態共七節,1500 不足會在生態段被截斷
         stream: true, // 串流:邊產生邊回傳,避免 Netlify 閒置逾時(504)
-        system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+        system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: userContent }]
       })
     });

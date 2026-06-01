@@ -211,7 +211,7 @@
     markerMode = false;
     setMarkerBtnState(false);
     map.getContainer().style.cursor = "";
-    toolHint.textContent = t("tools.hint");
+    toolHint.innerHTML = t("tools.hint"); // tools.hint 含 <b> 富文字
   }
 
   toolMarkerBtn.addEventListener("click", enableMarkerMode);
@@ -1369,10 +1369,12 @@
       : "<p style='color:#888'>" + t("r.aiEmpty") + "</p>";
     var MET = function (b) { return b === undefined ? "—" : (b ? t("r.met") : t("r.notMet")); };
 
+    var isSiteMode = g.mode === "within_site";
     var html = "<h1>" + t("r.title") + "</h1>";
     html += "<p class='meta'>" + (lastRegionTitle || "") +
       "<br>" + t("r.coord") + pnum(focus.lat) + "°N, " + pnum(focus.lng) + "°E" +
       (lastSiteAreaHa != null ? t("r.siteArea") + lastSiteAreaHa + t("r.uHa") : "") +
+      "<br>" + t("r.mode") + (isSiteMode ? t("r.modeSite") : t("r.modePoint")) +
       "<br>" + t("r.generated") + now.toLocaleString() + "</p>";
 
     html += "<h2>" + t("r.hPop") + "</h2><table class='summary'>" +

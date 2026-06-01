@@ -38,7 +38,7 @@
     "tools.marker": { zh: "點選放標記", en: "Place Marker" },
     "tools.polygon": { zh: "繪製基地範圍", en: "Draw Site" },
     "tools.clear": { zh: "清除全部", en: "Clear All" },
-    "tools.hint": { zh: "提示:選「點選放標記」後,在地圖上點擊即可放置標記。", en: "Tip: choose Place Marker, then click the map to drop a marker." },
+    "tools.hint": { zh: "兩種分析模式:<b>點選放標記</b>=以該點周邊評估生活圈(村里人口、半徑 500m 綠覆、可及性);<b>繪製基地範圍</b>=以基地紅線評估開發基地(鄉鎮人口、基地內綠覆、§45 法規、實際面積)。", en: "Two modes: <b>Place Marker</b> = assess the surroundings of a point (village population, green cover within 500 m, accessibility); <b>Draw Site</b> = assess a development site (township population, green cover within the site, §45, actual area)." },
 
     "area.h": { zh: "基地面積", en: "Site Area" },
     "area.unit": { zh: "公頃", en: "ha" },
@@ -271,6 +271,9 @@
     "r.coord": { zh: "座標:", en: "Coordinates: " },
     "r.siteArea": { zh: " · 基地面積 ", en: " · Site area " },
     "r.generated": { zh: "產製時間:", en: "Generated: " },
+    "r.mode": { zh: "分析模式:", en: "Analysis mode: " },
+    "r.modeSite": { zh: "基地範圍(鄉鎮人口 · 基地內綠覆 · §45)", en: "Drawn site (township pop. · in-site green cover · §45)" },
+    "r.modePoint": { zh: "點周邊(村里人口 · 半徑 500m 綠覆 · 可及性)", en: "Point surroundings (village pop. · 500 m green cover · accessibility)" },
     "r.hPop": { zh: "人口與指標", en: "Population & Indicators" },
     "r.hGreenSite": { zh: "開放空間 · 綠地(基地範圍內)", en: "Open Space · Green (within site)" },
     "r.hGreenRadius": { zh: "開放空間 · 綠地(半徑 {r} m,公園≥0.1ha)", en: "Open Space · Green (radius {r} m, park ≥0.1 ha)" },
@@ -387,7 +390,9 @@
     var nodes = document.querySelectorAll("[data-i18n]");
     nodes.forEach(function (n) {
       var key = n.getAttribute("data-i18n");
-      n.textContent = t(key);
+      // 標了 data-i18n-html 的元素允許富文字(如 <b>);其餘一律純文字,避免注入風險
+      if (n.hasAttribute("data-i18n-html")) n.innerHTML = t(key);
+      else n.textContent = t(key);
     });
     var ph = document.querySelectorAll("[data-i18n-ph]");
     ph.forEach(function (n) {

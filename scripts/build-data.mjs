@@ -202,8 +202,11 @@ const PRIMARY_CODE = "ODRP014";
 // 退回機制:全面掃描候選代碼與期別(亦因應未來代碼/期別變動)
 const CODE_SWEEP = [];
 for (let i = 1; i <= 30; i++) CODE_SWEEP.push("ODRP" + String(i).padStart(3, "0"));
-// 期別由近月優先,讓直接命中更快(月別資料用 yyymm、年度資料用 yyy)
-const SWEEP_PERIODS = ["11412", "11411", "11410", "11409", "11312", "114", "113"];
+// 期別由近月優先,讓直接命中更快(月別資料用 yyymm、年度資料用 yyy)。
+// 依「當前日期」動態產生,避免寫死的期別隨時間過期(戶政司只保留近期數月)。
+// 近 15 個月涵蓋跨年度,另附最近兩個年度碼(yyy)作為年度型資料集的退路。
+const NOW_ROC_Y = new Date().getFullYear() - 1911;
+const SWEEP_PERIODS = recentYyymm(15).concat([String(NOW_ROC_Y), String(NOW_ROC_Y - 1)]);
 
 // 單一代碼:逐期別嘗試,回傳第一個有資料者
 async function probeCode(code) {

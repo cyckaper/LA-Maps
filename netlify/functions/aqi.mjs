@@ -7,8 +7,9 @@
 
 const MOENV_AQI = "https://data.moenv.gov.tw/api/v2/aqx_p_432";
 
-function json(obj, status = 200) {
-  // 僅成功回應才允許快取;錯誤回應一律 no-store,避免「尚未設定」等暫時性錯誤被 CDN/瀏覽器快取 10 分鐘
+function json(obj, status = 200, cache = false) {
+  // 僅「有資料的成功回應」才快取(由呼叫端決定);錯誤或空結果一律 no-store,
+  // 避免「尚未設定」「查無資料」等暫時性結果被 CDN/瀏覽器快取 10 分鐘而卡住。
   const ok = status >= 200 && status < 300;
   return new Response(JSON.stringify(obj), {
     status,
@@ -17,7 +18,7 @@ function json(obj, status = 200) {
       "access-control-allow-origin": "*",
       "access-control-allow-methods": "GET, OPTIONS",
       "access-control-allow-headers": "content-type",
-      "cache-control": ok ? "public, max-age=600" : "no-store" // AQI 每小時更新,成功快取 10 分鐘減少呼叫
+      "cache-control": (ok && cache) ? "public, max-age=600" : "no-store" // AQI 每小時更新,有資料才快取 10 分鐘
     }
   });
 }
@@ -92,7 +93,8 @@ export default async (req) => {
     out.sampleKeys = records.length ? Object.keys(records[0]) : Object.keys(data);
     out.responseKeys = Object.keys(data);
   }
-  return json(out);
+  // 僅當有測站資料時才允許快取;空結果不快取,避免暫時性「查無」卡住
+  return json(out, 200, stations.length > 0);
 };
 
 // Netlify Functions 2.0:掛在 /api/aqi

@@ -58,14 +58,27 @@
     var w = document.getElementById("ovwarn-" + id);
     if (w) w.textContent = t("ov.warn");
   }
+  function clearOverlayWarn(id) {
+    var w = document.getElementById("ovwarn-" + id);
+    if (w) w.textContent = "";
+  }
 
   // NLSC 圖磚疊圖(標準 XYZ tile)
   function nlscOverlay(layerId, def) {
     var layer = nlscLayer(layerId, { opacity: overlayOpacity });
-    layer.on("tileerror", function () { warnOverlay(def.id); });
+    // 只有「完全載不出任何一塊圖磚」才視為失敗。
+    // 部分圖磚 404(非都市/海面/山區本就無分區圖資)屬正常,不應誤報。
+    var loadedOnce = false;
+    layer.on("tileload", function () {
+      if (!loadedOnce) { loadedOnce = true; clearOverlayWarn(def.id); }
+    });
+    layer.on("tileerror", function () { if (!loadedOnce) warnOverlay(def.id); });
     return {
       active: false,
-      add: function () { layer.addTo(map); layer.bringToFront(); this.active = true; },
+      add: function () {
+        loadedOnce = false; clearOverlayWarn(def.id);
+        layer.addTo(map); layer.bringToFront(); this.active = true;
+      },
       remove: function () { map.removeLayer(layer); this.active = false; },
       setOpacity: function (o) { layer.setOpacity(o); },
       front: function () { if (map.hasLayer(layer)) layer.bringToFront(); }

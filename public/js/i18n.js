@@ -129,6 +129,9 @@
     "ai.h": { zh: "AI 解讀", en: "AI Analysis" },
     "ai.btn": { zh: "產生 AI 基地分析報告", en: "Generate AI Site Report" },
     "ai.export": { zh: "匯出 / 列印報告(可存 PDF)", en: "Export / Print Report (PDF)" },
+    "zoning.btn": { zh: "送到分區與動線工具", en: "Send to Zoning & Circulation tool" },
+    "zoning.hint": { zh: "劃出基地範圍後,可一鍵把範圍送到「景觀規劃分區與動線」工具,免重劃。", en: "After drawing the site boundary, send it to the Zoning & Circulation tool in one click—no need to redraw." },
+    "zoning.need": { zh: "請先劃出基地範圍", en: "Please draw the site boundary first" },
 
     "credits.h": { zh: "資料來源與版權", en: "Data Sources & Credits" },
     "credits.basemap": { zh: "底圖圖磚:內政部國土測繪中心 (NLSC)", en: "Base tiles: NLSC, Taiwan" },

@@ -11,6 +11,9 @@
     "https://wmts.nlsc.gov.tw/wmts/{layer}/default/GoogleMapsCompatible/{z}/{y}/{x}";
   var NLSC_ATTR = "圖磚 © 內政部國土測繪中心 (NLSC)";
 
+  // 下游「景觀規劃分區與動線」工具(深連結接收基地範圍)
+  var ZONING_TOOL_URL = "https://zoning8circulation.netlify.app";
+
   // 預設視野:台北 · 台灣大學附近
   var DEFAULT_CENTER = [25.0174, 121.5398];
   var DEFAULT_ZOOM = 16;
@@ -284,6 +287,7 @@
       var xy = c.geometry.coordinates; // [lng, lat]
       lastFocus = L.latLng(xy[1], xy[0]);
       lastSitePolygon = e.layer.toGeoJSON(); // 面模式:分析範圍內綠地
+      updateZoningBtnState(); // 已有範圍:啟用「送到分區與動線工具」
       lookupTown(xy[1], xy[0]);
       if (cmState.allPoints.length) refreshCommentScope(); // 已載入意見:依範圍篩選
     } catch (err) {
@@ -344,6 +348,7 @@
     lastFocus = null;
     lastSitePolygon = null;
     lastBiodiv = null;
+    updateZoningBtnState(); // 範圍已清:停用「送到分區與動線工具」
     resetGreenPanel();
     resetBiodivPanel();
     cmMarkers.clearLayers(); // 清意見圖層標示(保留已上傳資料,可重新選範圍篩選)
@@ -1924,6 +1929,18 @@
 
     html += "<h2>" + t("r.hSrc") + "</h2><p class='src'>" + t("r.src") + "</p>";
     html += "<p class='author'>" + t("foot.author") + "</p>";
+
+    // 備援:於頁尾加一行可被文字擷取的範圍標記,供下游「分區與動線」工具讀 PDF 還原範圍。
+    // 格式 HEALS-BOUNDARY:[[緯度,經度],...](lat 在前,與深連結契約一致)。小字、不影響外觀。
+    var siteLayer = getSiteLayer();
+    if (siteLayer) {
+      var ring = siteOuterRing(siteLayer);
+      if (ring && ring.length >= 3) {
+        var bpts = ring.map(function (pt) { return [+pt.lat.toFixed(6), +pt.lng.toFixed(6)]; });
+        html += "<p class='boundary-marker' style='font-size:8px;color:#bbb;margin-top:14px;" +
+          "word-break:break-all;'>HEALS-BOUNDARY:" + JSON.stringify(bpts) + "</p>";
+      }
+    }
     return html;
   }
 
@@ -1964,6 +1981,52 @@
     w.document.close();
     aiSource.textContent = t("exp.opened");
   });
+
+  // =========================================================
+  //  送到「分區與動線」工具(深連結帶基地範圍)
+  // =========================================================
+  var zoningBtn = document.getElementById("zoning-btn");
+
+  // 找使用者劃的基地範圍多邊形圖層(drawnItems 內第一個可取頂點者)
+  function getSiteLayer() {
+    var found = null;
+    drawnItems.eachLayer(function (layer) {
+      if (found || typeof layer.getLatLngs !== "function") return;
+      var o = siteOuterRing(layer);
+      if (o && o.length >= 3) found = layer;
+    });
+    return found;
+  }
+  // 取多邊形外環的 LatLng 陣列(逐層下探至最內層 latlng 陣列)
+  function siteOuterRing(layer) {
+    var o = layer.getLatLngs();
+    while (Array.isArray(o) && o.length && Array.isArray(o[0])) o = o[0];
+    return o;
+  }
+
+  // 依按鈕是否有可送的範圍切換停用狀態
+  function updateZoningBtnState() {
+    if (zoningBtn) zoningBtn.disabled = !getSiteLayer();
+  }
+
+  if (zoningBtn) {
+    zoningBtn.addEventListener("click", function () {
+      var layer = getSiteLayer();
+      var ring = layer ? siteOuterRing(layer) : null;
+      if (!ring || ring.length < 3) { alert(t("zoning.need")); return; }
+      // 注意:深連結契約用 [緯度, 經度](lat 在前,與 GeoJSON 相反)
+      var pts = ring.map(function (p) { return [+p.lat.toFixed(6), +p.lng.toFixed(6)]; });
+      var c = layer.getBounds().getCenter();
+      var payload = {
+        v: 1,
+        boundary: pts,
+        locationName: lastRegionTitle || "",
+        center: [+c.lat.toFixed(6), +c.lng.toFixed(6)]
+      };
+      var url = ZONING_TOOL_URL + "/#site=" + encodeURIComponent(JSON.stringify(payload));
+      window.open(url, "_blank");
+    });
+  }
 
   // 語言切換時:重繪疊圖圖層名稱、空面板提示與已顯示的人口指標
   window.addEventListener("langchange", function () {

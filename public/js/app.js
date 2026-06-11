@@ -11,8 +11,8 @@
     "https://wmts.nlsc.gov.tw/wmts/{layer}/default/GoogleMapsCompatible/{z}/{y}/{x}";
   var NLSC_ATTR = "圖磚 © 內政部國土測繪中心 (NLSC)";
 
-  // 下游「景觀規劃分區與動線」工具(深連結接收基地範圍)
-  var ZONING_TOOL_URL = "https://zoning8circulation.netlify.app";
+  // 下游「景觀規劃分區與動線」工具(深連結接收基地範圍;指向正式網域)
+  var ZONING_TOOL_URL = "https://zoning8circulation.healsdesign.org";
 
   // 預設視野:台北 · 台灣大學附近
   var DEFAULT_CENTER = [25.0174, 121.5398];
@@ -1980,10 +1980,11 @@
     w.document.write(buildReportDoc());
     w.document.close();
     aiSource.textContent = t("exp.opened");
+    syncSiteToZoning(); // 產生報告時同步範圍 cookie,供分區與動線工具讀取
   });
 
   // =========================================================
-  //  送到「分區與動線」工具(深連結帶基地範圍)
+  //  送到「分區與動線」工具(深連結帶基地範圍 + 跨子網域 cookie 同步)
   // =========================================================
   var zoningBtn = document.getElementById("zoning-btn");
 
@@ -2004,29 +2005,78 @@
     return o;
   }
 
-  // 依按鈕是否有可送的範圍切換停用狀態
+  // 範圍逾 80 點先簡化(cookie 有 4KB 上限)。優先 turf.simplify 保形狀,失敗退回均勻取樣。
+  var ZONING_MAX_PTS = 80;
+  function simplifyRing(layer, ring) {
+    if (ring.length <= ZONING_MAX_PTS) return ring;
+    try {
+      var gj = layer.toGeoJSON();
+      for (var tol = 0.00005; tol <= 0.01; tol *= 2) {
+        var s = turf.simplify(gj, { tolerance: tol, highQuality: true });
+        var coords = s.geometry.coordinates;
+        while (Array.isArray(coords) && coords.length && Array.isArray(coords[0][0])) coords = coords[0];
+        if (coords.length - 1 <= ZONING_MAX_PTS && coords.length >= 4) {
+          // GeoJSON ring 首尾重複,轉回 LatLng 形式並去尾
+          return coords.slice(0, coords.length - 1).map(function (xy) {
+            return { lat: xy[1], lng: xy[0] };
+          });
+        }
+      }
+    } catch (e) { /* 退回取樣 */ }
+    var step = Math.ceil(ring.length / ZONING_MAX_PTS);
+    return ring.filter(function (_, i) { return i % step === 0; });
+  }
+
+  // 組深連結/cookie 共用的 payload(座標 [緯度,經度],lat 在前,小數 6 位)
+  function buildSitePayload() {
+    var layer = getSiteLayer();
+    if (!layer) return null;
+    var ring = siteOuterRing(layer);
+    if (!ring || ring.length < 3) return null;
+    ring = simplifyRing(layer, ring);
+    var pts = ring.map(function (p) { return [+p.lat.toFixed(6), +p.lng.toFixed(6)]; });
+    var c = layer.getBounds().getCenter();
+    return {
+      v: 1,
+      boundary: pts,
+      locationName: lastRegionTitle || "",
+      center: [+c.lat.toFixed(6), +c.lng.toFixed(6)],
+      area: lastSiteAreaHa != null ? lastSiteAreaHa : undefined
+    };
+  }
+
+  // 把範圍寫入跨子網域 cookie(heals_site @ .healsdesign.org),
+  // 讓 zoning8circulation.healsdesign.org 等子網域工具可直接讀取;無範圍則清除。
+  function syncSiteToZoning() {
+    var payload = buildSitePayload();
+    if (!payload) {
+      document.cookie = "heals_site=; domain=.healsdesign.org; path=/; max-age=0; SameSite=Lax; Secure";
+      return;
+    }
+    var enc = encodeURIComponent(JSON.stringify(payload));
+    document.cookie = "heals_site=" + enc +
+      "; domain=.healsdesign.org; path=/; max-age=86400; SameSite=Lax; Secure";
+  }
+
+  // 依按鈕是否有可送的範圍切換停用狀態,並同步 cookie
   function updateZoningBtnState() {
     if (zoningBtn) zoningBtn.disabled = !getSiteLayer();
+    syncSiteToZoning();
   }
 
   if (zoningBtn) {
     zoningBtn.addEventListener("click", function () {
-      var layer = getSiteLayer();
-      var ring = layer ? siteOuterRing(layer) : null;
-      if (!ring || ring.length < 3) { alert(t("zoning.need")); return; }
-      // 注意:深連結契約用 [緯度, 經度](lat 在前,與 GeoJSON 相反)
-      var pts = ring.map(function (p) { return [+p.lat.toFixed(6), +p.lng.toFixed(6)]; });
-      var c = layer.getBounds().getCenter();
-      var payload = {
-        v: 1,
-        boundary: pts,
-        locationName: lastRegionTitle || "",
-        center: [+c.lat.toFixed(6), +c.lng.toFixed(6)]
-      };
+      var payload = buildSitePayload();
+      if (!payload) { alert(t("zoning.need")); return; }
+      syncSiteToZoning(); // 點擊時再同步一次,確保 cookie 為最新
       var url = ZONING_TOOL_URL + "/#site=" + encodeURIComponent(JSON.stringify(payload));
       window.open(url, "_blank");
     });
   }
+
+  // 範圍編輯/刪除時亦同步(若啟用 leaflet-draw 編輯工具)
+  map.on(L.Draw.Event.EDITED, updateZoningBtnState);
+  map.on(L.Draw.Event.DELETED, updateZoningBtnState);
 
   // 語言切換時:重繪疊圖圖層名稱、空面板提示與已顯示的人口指標
   window.addEventListener("langchange", function () {

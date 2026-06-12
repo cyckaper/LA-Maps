@@ -2074,6 +2074,75 @@
     });
   }
 
+  // ============================================================
+  // HEALS 串接:匯出「完整基地分析 JSON」(打卡用 / 給下游站)
+  // 把 map 算出的所有內容(lastAnalysis)＋基地幾何，序列化成一份
+  // schema=heals-site-analysis/1 的 JSON：下載成檔 + 複製到剪貼簿。
+  // 這是 heals_site cookie(只帶範圍)之外的「完整內容」通道。
+  // ============================================================
+  function hxLang(zh, en) { return document.documentElement.lang === "en" ? en : zh; }
+  function hxToast(msg) {
+    var d = document.createElement("div");
+    d.textContent = msg;
+    d.style.cssText = "position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#2f4a32;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;line-height:1.5;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,.25);max-width:90%;text-align:center";
+    document.body.appendChild(d);
+    setTimeout(function () { d.style.transition = "opacity .4s"; d.style.opacity = "0"; setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 400); }, 2800);
+  }
+  function buildSiteAnalysisExport() {
+    var geo = buildSitePayload();
+    if (!geo) {
+      geo = {
+        v: 1,
+        boundary: [],
+        locationName: lastRegionTitle || "",
+        center: (typeof lastFocus !== "undefined" && lastFocus)
+          ? [+lastFocus.lat.toFixed(6), +lastFocus.lng.toFixed(6)]
+          : (lastAnalysis && lastAnalysis.focus ? [lastAnalysis.focus.lat, lastAnalysis.focus.lng] : null),
+        area: lastSiteAreaHa != null ? lastSiteAreaHa : undefined
+      };
+    }
+    return {
+      schema: "heals-site-analysis/1",
+      station: "map",
+      exportedAt: new Date().toISOString(),
+      site: geo,
+      analysis: lastAnalysis || null
+    };
+  }
+  function exportSiteAnalysisJSON() {
+    if (!lastAnalysis) {
+      alert(hxLang(
+        "尚無分析結果可匯出。請先放標記或畫基地範圍，按「分析周邊綠地」(可再加生態、意見等)後再匯出。",
+        "No analysis yet. Place a marker or draw the site, run Analyze nearby green space (optionally biodiversity / comments), then export."
+      ));
+      return;
+    }
+    var data = buildSiteAnalysisExport();
+    var json = JSON.stringify(data, null, 2);
+    var fname = (data.site && data.site.locationName ? data.site.locationName : "site") + "_基地分析.json";
+    try {
+      var blob = new Blob([json], { type: "application/json" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); if (a.parentNode) a.parentNode.removeChild(a); }, 0);
+    } catch (e) {}
+    try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(json); } catch (e) {}
+    hxToast(hxLang(
+      "已匯出基地分析 JSON，並複製到剪貼簿，可貼進總控台「完成打卡」。",
+      "Site-analysis JSON exported and copied to clipboard. Paste it into the console check-in."
+    ));
+  }
+  var exportJsonBtn = document.getElementById("export-json-btn");
+  if (exportJsonBtn) exportJsonBtn.addEventListener("click", exportSiteAnalysisJSON);
+  function hxSyncExportLabel() {
+    if (exportJsonBtn) exportJsonBtn.textContent = hxLang("匯出基地分析 JSON(打卡 / 串接用)", "Export site-analysis JSON (check-in / chaining)");
+  }
+  hxSyncExportLabel();
+  window.addEventListener("langchange", hxSyncExportLabel);
+
   // 範圍編輯/刪除時亦同步(若啟用 leaflet-draw 編輯工具)
   map.on(L.Draw.Event.EDITED, updateZoningBtnState);
   map.on(L.Draw.Event.DELETED, updateZoningBtnState);
